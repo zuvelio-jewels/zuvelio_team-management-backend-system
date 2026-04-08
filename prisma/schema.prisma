@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(EMPLOYEE)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshToken           String?
+  passwordResetToken     String?
+  passwordResetExpiresAt DateTime?
+  failedLoginAttempts    Int       @default(0)
+  lockedUntil            DateTime?
+
+  tasks      Task[]
+  attendance Attendance[]
+  leaves     Leave[]
+}
+
+model Task {
+  id          Int      @id @default(autoincrement())
+  title       String
+  description String?
+  status      String   @default("TODO")
+  userId      Int
+  user        User     @relation(fields: [userId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model Attendance {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  date      DateTime
+  checkIn   DateTime?
+  checkOut  DateTime?
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Leave {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  type      String
+  fromDate  DateTime
+  toDate    DateTime
+  status    String   @default("PENDING")
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
