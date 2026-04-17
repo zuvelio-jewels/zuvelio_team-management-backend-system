@@ -19,4 +19,7 @@ RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
 # Build NestJS
 RUN npx nest build
 
-CMD ["sh", "./entrypoint.sh"]
+# Tell Railway which port to proxy to
+EXPOSE 8080
+
+CMD ["node", "dist/src/main.js"]
