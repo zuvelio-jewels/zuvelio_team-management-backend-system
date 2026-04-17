@@ -5,53 +5,43 @@ RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists
 
 WORKDIR /app
 
-# Install dependencies (layer cache friendly)
-COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+# Copy manifests + prisma config first (layer caching)
+COPY package.json package-lock.json prisma.config.ts tsconfig.json ./
+COPY prisma ./prisma
 
-# Copy source and build
+# Install all dependencies (dev included for @nestjs/cli)
+RUN npm ci
+
+# Generate Prisma client (inline placeholder — does NOT persist as ENV)
+RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
+
+# Copy remaining source and build
 COPY . .
-
-# Prisma generate needs a syntactically valid DATABASE_URL at build time
-ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-RUN npx prisma generate
 RUN npx nest build
 
 # ── Stage 2: Production ────────────────────────────────────────
-FROM node:20-slim AS runner
+FROM node:20-slim
 
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy only production artifacts
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
-
-# ts-node is needed at runtime for prisma.config.ts (used by prisma migrate deploy)
-RUN npm install ts-node
-
-# Copy Prisma schema + migrations (needed for migrate deploy)
+# Copy manifests + prisma config (BEFORE prisma generate so config is available)
+COPY package.json package-lock.json prisma.config.ts tsconfig.json ./
 COPY prisma ./prisma
 
-# Re-generate Prisma client in the production image
-ENV DATABASE_URL="postgresql://placeholder:placeholder@localhost:5432/placeholder"
-RUN npx prisma generate
+# Install production dependencies only
+RUN npm ci --omit=dev
 
-# Copy compiled app
+# Generate Prisma client for the production image
+RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
+
+# Copy compiled app from builder
 COPY --from=builder /app/dist ./dist
 
 # Copy entrypoint
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
 
-# Copy prisma config (needed for migrate deploy)
-COPY prisma.config.ts ./prisma.config.ts
-COPY tsconfig.json ./tsconfig.json
-
-# Unset the placeholder so it doesn't leak into runtime
-ENV DATABASE_URL=""
-
-EXPOSE 8080
-
+# Railway injects PORT at runtime
 CMD ["sh", "./entrypoint.sh"]
