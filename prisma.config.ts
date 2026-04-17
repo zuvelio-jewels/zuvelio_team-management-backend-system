@@ -3,6 +3,9 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+const BUILD_TIME_PLACEHOLDER_DB_URL =
+  "postgresql://postgres:postgres@localhost:5432/postgres";
+
 const resolveDatabaseUrl = (): string => {
   const directUrl = process.env["DATABASE_URL"] || process.env["DATABASE_PUBLIC_URL"];
   if (directUrl) {
@@ -17,6 +20,13 @@ const resolveDatabaseUrl = (): string => {
 
   if (host && port && user && password && database) {
     return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+  }
+
+  // `prisma generate` runs during image build where DB credentials may not exist yet.
+  // A syntactically valid placeholder URL allows client generation to proceed.
+  const lifecycleEvent = process.env["npm_lifecycle_event"];
+  if (lifecycleEvent === "prisma" || lifecycleEvent === "prisma:generate") {
+    return BUILD_TIME_PLACEHOLDER_DB_URL;
   }
 
   throw new Error(
