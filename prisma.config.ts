@@ -3,12 +3,16 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
+const databaseUrl =
+  process.env["DATABASE_URL"] ||
+  `postgresql://${process.env.POSTGRES_USER || "zuvelio_user"}:${process.env.POSTGRES_PASSWORD || "zuvelio_password"}@${process.env.DB_HOST || "db"}:${process.env.DB_PORT || "5432"}/${process.env.POSTGRES_DB || "zuvelio_db"}`;
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: databaseUrl,
   },
 });

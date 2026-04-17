@@ -22,19 +22,34 @@ model User {
   failedLoginAttempts    Int       @default(0)
   lockedUntil            DateTime?
 
-  tasks      Task[]
-  attendance Attendance[]
-  leaves     Leave[]
+  assignedTasks  Task[]  @relation("AssignedTo")
+  allottedTasks  Task[]  @relation("AllottedFrom")
+  attendance     Attendance[]
+  leaves         Leave[]
 }
 
 model Task {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  status      String   @default("TODO")
-  userId      Int
-  user        User     @relation(fields: [userId], references: [id])
-  createdAt   DateTime @default(now())
+  id            Int       @id @default(autoincrement())
+  cabin         String
+  taskDetail    String
+  completeBy    String    // TODAY, TOMORROW, WITHIN_3_DAYS, WITHIN_7_DAYS
+  deadline      DateTime?
+  personStatus  String    @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, DONE
+  note          String?
+  alert         String?   // Auto-computed: COMPLETE_IN_TIME, LATE_COMPLETE, RE_WORK, etc.
+  qcCheck       String?   // DONE, ISSUE
+  remark        String?
+  isPresent     Boolean   @default(true)
+  updatedBy     DateTime?
+
+  assignedToId  Int
+  assignedTo    User      @relation("AssignedTo", fields: [assignedToId], references: [id])
+
+  allottedFromId Int
+  allottedFrom   User     @relation("AllottedFrom", fields: [allottedFromId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model Attendance {

@@ -57,18 +57,53 @@ $ npm run test:e2e
 $ npm run test:cov
 ```
 
-## Deployment
+## Railway deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+This project is ready to deploy on Railway using the existing `Dockerfile`.
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### 1) Create services in Railway
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
+1. Create a new Railway project.
+2. Add a PostgreSQL service.
+3. Add a new service from this GitHub repository (the backend).
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 2) Configure environment variables
+
+Set these variables in the backend Railway service:
+
+- `DATABASE_URL` (copy from the Railway PostgreSQL service `DATABASE_URL` output)
+- `JWT_SECRET`
+- `JWT_ACCESS_EXPIRY` (for example `15m`)
+- `JWT_REFRESH_SECRET`
+- `JWT_REFRESH_EXPIRY` (for example `7d`)
+- `CORS_ORIGIN` (comma-separated list, for example `https://your-frontend-domain.com`)
+- `NODE_ENV=production`
+
+Railway provides `PORT` automatically, and the app already binds to it.
+
+Quick setup:
+
+1. Run `npm run secrets:generate` locally.
+2. Copy keys from `.env.railway.example` into Railway Variables.
+3. Paste generated `JWT_SECRET` and `JWT_REFRESH_SECRET` values.
+4. Paste `DATABASE_URL` from the Railway PostgreSQL service.
+
+### 3) Deploy
+
+1. Push your code to your connected branch.
+2. Trigger deployment from Railway (or enable auto-deploy).
+3. On startup, the container runs `prisma migrate deploy` before starting the API.
+
+### 4) Verify health
+
+- Open the generated Railway public URL.
+- Root endpoint `/` should respond.
+- API routes are prefixed with `/api`.
+
+### Notes
+
+- Prisma migrations are applied automatically at container startup.
+- If the DB is still waking up, startup retries migrations automatically.
 
 ## Resources
 

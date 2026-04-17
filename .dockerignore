@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+dist
+.git
+.gitignore
+README.md
+.env.example
+.env
+.vscode
+.idea
+*.log
+.DS_Store
+coverage
+test
+.eslintcache
+.prettierignore

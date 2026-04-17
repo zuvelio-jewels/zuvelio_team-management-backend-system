@@ -17,7 +17,14 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "prisma": "prisma",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:reset": "prisma migrate reset",
+    "prisma:studio": "prisma studio",
+    "secrets:generate": "node -e \"const c=require('crypto');console.log('JWT_SECRET='+c.randomBytes(32).toString('hex'));console.log('JWT_REFRESH_SECRET='+c.randomBytes(32).toString('hex'));\""
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -37,13 +44,15 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "crypto": "^1.0.1",
+    "dotenv": "^17.2.3",
     "helmet": "^8.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "uuid": "^13.0.0"
+    "uuid": "^13.0.0",
+    "prisma": "^7.7.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -61,7 +70,6 @@
     "globals": "^17.0.0",
     "jest": "^30.0.0",
     "prettier": "^3.4.2",
-    "prisma": "^7.7.0",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",
