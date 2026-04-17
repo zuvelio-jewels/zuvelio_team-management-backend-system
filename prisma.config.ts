@@ -3,9 +3,28 @@
 import "dotenv/config";
 import { defineConfig } from "prisma/config";
 
-const databaseUrl =
-  process.env["DATABASE_URL"] ||
-  `postgresql://${process.env.POSTGRES_USER || "zuvelio_user"}:${process.env.POSTGRES_PASSWORD || "zuvelio_password"}@${process.env.DB_HOST || "db"}:${process.env.DB_PORT || "5432"}/${process.env.POSTGRES_DB || "zuvelio_db"}`;
+const resolveDatabaseUrl = (): string => {
+  const directUrl = process.env["DATABASE_URL"] || process.env["DATABASE_PUBLIC_URL"];
+  if (directUrl) {
+    return directUrl;
+  }
+
+  const host = process.env["PGHOST"] || process.env["POSTGRES_HOST"] || process.env["DB_HOST"];
+  const port = process.env["PGPORT"] || process.env["POSTGRES_PORT"] || process.env["DB_PORT"];
+  const user = process.env["PGUSER"] || process.env["POSTGRES_USER"];
+  const password = process.env["PGPASSWORD"] || process.env["POSTGRES_PASSWORD"];
+  const database = process.env["PGDATABASE"] || process.env["POSTGRES_DB"];
+
+  if (host && port && user && password && database) {
+    return `postgresql://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}/${database}`;
+  }
+
+  throw new Error(
+    "DATABASE_URL is not set. Configure DATABASE_URL (recommended) or provide PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE.",
+  );
+};
+
+const databaseUrl = resolveDatabaseUrl();
 
 export default defineConfig({
   schema: "prisma/schema.prisma",
