@@ -12,6 +12,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Prisma client generation only needs a syntactically valid URL at build time.
+ENV DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+
 # Generate Prisma client and build the application
 RUN npm run prisma generate && npm run build
 
