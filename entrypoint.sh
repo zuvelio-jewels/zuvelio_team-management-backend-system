@@ -20,4 +20,4 @@ until npx prisma migrate deploy; do
 done
 
 echo "Starting NestJS application..."
-exec node dist/main.js
+exec node dist/src/main.js
