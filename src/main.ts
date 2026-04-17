@@ -5,6 +5,8 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const host = '0.0.0.0';
+  const port = Number(process.env.PORT) || 3000;
 
   const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:4200')
     .split(',')
@@ -46,6 +48,7 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api');
 
-  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
+  await app.listen(port, host);
+  console.log(`[BOOT] Listening on ${host}:${port}`);
 }
 bootstrap();
