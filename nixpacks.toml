@@ -1,5 +1,8 @@
+[variables]
+NPM_CONFIG_PRODUCTION = "false"
+
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm ci --include=dev"]
 
 [phases.build]
 cmds = ["npm run prisma generate", "npm run build"]
