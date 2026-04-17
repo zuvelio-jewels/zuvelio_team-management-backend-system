@@ -1,47 +1,29 @@
-# ── Stage 1: Build ──────────────────────────────────────────────
-FROM node:20-slim AS builder
-
-RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy manifests + prisma config first (layer caching)
-COPY package.json package-lock.json prisma.config.ts tsconfig.json ./
-COPY prisma ./prisma
-
-# Install all dependencies (dev included for @nestjs/cli)
-RUN npm ci
-
-# Generate Prisma client (inline placeholder — does NOT persist as ENV)
-RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
-
-# Copy remaining source and build
-COPY . .
-RUN npx nest build
-
-# ── Stage 2: Production ────────────────────────────────────────
 FROM node:20-slim
 
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy manifests + prisma config (BEFORE prisma generate so config is available)
-COPY package.json package-lock.json prisma.config.ts tsconfig.json ./
-COPY prisma ./prisma
+# Copy everything
+COPY . .
 
-# Install production dependencies only
-RUN npm ci --omit=dev
+# Install all dependencies (including dev — needed for nest build + prisma config)
+RUN npm ci
 
-# Generate Prisma client for the production image
+# Generate Prisma client (inline placeholder avoids polluting ENV)
 RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
 
-# Copy compiled app from builder
-COPY --from=builder /app/dist ./dist
+# Build NestJS
+RUN npx nest build
 
-# Copy entrypoint
-COPY entrypoint.sh ./entrypoint.sh
+# Prune dev dependencies after build
+RUN npm prune --omit=dev
+
+# Re-generate Prisma client against prod node_modules
+RUN DATABASE_URL="postgresql://p:p@localhost:5432/p" npx prisma generate
+
 RUN chmod +x ./entrypoint.sh
 
-# Railway injects PORT at runtime
+EXPOSE 3000
+
 CMD ["sh", "./entrypoint.sh"]
