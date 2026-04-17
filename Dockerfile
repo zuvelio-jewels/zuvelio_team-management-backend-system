@@ -23,8 +23,8 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Install dumb-init to handle signals properly and netcat for database checks
-RUN apk add --no-cache dumb-init netcat-openbsd
+# Install dumb-init to handle signals properly
+RUN apk add --no-cache dumb-init
 
 # Copy package files
 COPY package*.json ./
@@ -51,10 +51,6 @@ RUN chmod +x entrypoint.sh
 
 # Expose port
 EXPOSE 3000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD sh -c "nc -z localhost ${PORT:-3000}" || exit 1
 
 # Use dumb-init to run the application
 ENTRYPOINT ["dumb-init", "--"]
