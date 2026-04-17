@@ -48,7 +48,7 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api');
 
-  await app.listen(port, host);
-  console.log(`[BOOT] Listening on ${host}:${port}`);
+  await app.listen(port);
+  console.log(`[BOOT] Listening on port ${port}`);
 }
 bootstrap();
