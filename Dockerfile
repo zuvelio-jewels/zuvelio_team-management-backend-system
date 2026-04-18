@@ -22,4 +22,4 @@ RUN npx nest build
 # Tell Railway which port to proxy to
 EXPOSE 8080
 
-CMD ["node", "dist/src/main.js"]
+CMD ["npm", "run", "start:docker"]

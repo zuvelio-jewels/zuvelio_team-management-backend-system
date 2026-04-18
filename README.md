@@ -34,7 +34,8 @@ $ npm install
 ## Compile and run the project
 
 ```bash
-# development
+# build then run (cross-platform, includes prisma migrate deploy retries)
+$ npm run build
 $ npm run start
 
 # watch mode
@@ -42,6 +43,9 @@ $ npm run start:dev
 
 # production mode
 $ npm run start:prod
+
+# docker/linux entrypoint (used by Dockerfile)
+$ npm run start:docker
 ```
 
 ## Run tests
@@ -56,6 +60,23 @@ $ npm run test:e2e
 # test coverage
 $ npm run test:cov
 ```
+
+## Local Docker Compose
+
+Run backend + PostgreSQL from this folder:
+
+```bash
+# start
+$ docker compose up -d --build
+
+# view logs
+$ docker compose logs -f backend
+
+# stop
+$ docker compose down
+```
+
+The backend will be available at `http://localhost:3000`.
 
 ## Railway deployment
 
