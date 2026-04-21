@@ -9,11 +9,14 @@ import {
     ParseIntPipe,
     Query,
     Request,
+    UseInterceptors,
 } from '@nestjs/common';
+import { ClassSerializerInterceptor } from '@nestjs/common';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
 @Controller('tasks')
+@UseInterceptors(ClassSerializerInterceptor)
 export class TasksController {
     constructor(private tasksService: TasksService) { }
 
