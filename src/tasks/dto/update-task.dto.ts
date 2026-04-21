@@ -16,7 +16,7 @@ export class UpdateTaskDto {
 
     @IsOptional()
     @IsString()
-    @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'DONE'])
+    @IsIn(['NOT_STARTED', 'IN_PROGRESS', 'STUCK', 'DONE'])
     personStatus?: string;
 
     @IsOptional()

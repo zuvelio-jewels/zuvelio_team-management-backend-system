@@ -53,6 +53,10 @@ export class TasksService {
             return isOverdue ? 'UNDER_PROCESS_TIMEOUT' : 'UNDER_PROCESS_IN_TIME';
         }
 
+        if (task.personStatus === 'STUCK') {
+            return isOverdue ? 'STUCK_WITH_TIMEOUT' : 'STUCK_IN_TIME';
+        }
+
         // NOT_STARTED
         return isOverdue ? 'NOT_START_YET_TIMEOUT' : 'NOT_START_YET_IN_TIME';
     }
@@ -77,6 +81,13 @@ export class TasksService {
                 allottedFrom: { select: { id: true, name: true, email: true, role: true } },
             },
         });
+
+        // Save initial note to history if provided
+        if (dto.note) {
+            await this.prisma.taskNoteHistory.create({
+                data: { taskId: task.id, note: dto.note, authorId: allottedFromId },
+            });
+        }
 
         return task;
     }
@@ -118,13 +129,17 @@ export class TasksService {
             include: {
                 assignedTo: { select: { id: true, name: true, email: true, role: true } },
                 allottedFrom: { select: { id: true, name: true, email: true, role: true } },
+                documents: {
+                    include: { uploadedBy: { select: { id: true, name: true } } },
+                    orderBy: { createdAt: 'asc' },
+                },
             },
         });
         if (!task) throw new NotFoundException('Task not found');
         return { ...task, alert: this.computeAlert(task) };
     }
 
-    async update(id: number, dto: UpdateTaskDto) {
+    async update(id: number, dto: UpdateTaskDto, authorId?: number) {
         const existing = await this.prisma.task.findUnique({ where: { id } });
         if (!existing) throw new NotFoundException('Task not found');
 
@@ -138,6 +153,17 @@ export class TasksService {
         // Set updatedBy timestamp when person status changes
         if (dto.personStatus && dto.personStatus !== existing.personStatus) {
             data.updatedBy = new Date();
+        }
+
+        // Save note to history if note changed
+        if (dto.note !== undefined && dto.note !== existing.note && authorId) {
+            await this.prisma.taskNoteHistory.create({
+                data: {
+                    taskId: id,
+                    note: dto.note,
+                    authorId,
+                },
+            });
         }
 
         const task = await this.prisma.task.update({
@@ -156,6 +182,14 @@ export class TasksService {
         const existing = await this.prisma.task.findUnique({ where: { id } });
         if (!existing) throw new NotFoundException('Task not found');
         return this.prisma.task.delete({ where: { id } });
+    }
+
+    async findNoteHistory(taskId: number) {
+        return this.prisma.taskNoteHistory.findMany({
+            where: { taskId },
+            include: { author: { select: { id: true, name: true } } },
+            orderBy: { createdAt: 'desc' },
+        });
     }
 
     async getSummary() {

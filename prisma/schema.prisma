@@ -22,10 +22,12 @@ model User {
   failedLoginAttempts    Int       @default(0)
   lockedUntil            DateTime?
 
-  assignedTasks  Task[]  @relation("AssignedTo")
-  allottedTasks  Task[]  @relation("AllottedFrom")
-  attendance     Attendance[]
-  leaves         Leave[]
+  assignedTasks      Task[]         @relation("AssignedTo")
+  allottedTasks      Task[]         @relation("AllottedFrom")
+  uploadedDocuments  TaskDocument[] @relation("UploadedDocuments")
+  noteHistories      TaskNoteHistory[] @relation("NoteHistoryAuthor")
+  attendance         Attendance[]
+  leaves             Leave[]
 }
 
 model Task {
@@ -48,8 +50,34 @@ model Task {
   allottedFromId Int
   allottedFrom   User     @relation("AllottedFrom", fields: [allottedFromId], references: [id])
 
+  documents     TaskDocument[]
+  noteHistories TaskNoteHistory[]
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model TaskNoteHistory {
+  id        Int      @id @default(autoincrement())
+  taskId    Int
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  note      String
+  authorId  Int
+  author    User     @relation("NoteHistoryAuthor", fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model TaskDocument {
+  id           Int      @id @default(autoincrement())
+  taskId       Int
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedById Int
+  uploadedBy   User     @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
 }
 
 model Attendance {
