@@ -46,6 +46,13 @@ lerna-debug.log*
 .temp
 .tmp
 
+# Database backups (keep local only)
+/backups/
+*.sql
+
+# Uploaded files
+/uploads/
+
 # Runtime data
 pids
 *.pid

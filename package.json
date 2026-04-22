@@ -5,6 +5,7 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
+  "type": "module",
   "engines": {
     "node": ">=20.19.0"
   },
@@ -28,7 +29,9 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:reset": "prisma migrate reset",
     "prisma:studio": "prisma studio",
-    "secrets:generate": "node -e \"const c=require('crypto');console.log('JWT_SECRET='+c.randomBytes(32).toString('hex'));console.log('JWT_REFRESH_SECRET='+c.randomBytes(32).toString('hex'));\""
+    "secrets:generate": "node -e \"const c=require('crypto');console.log('JWT_SECRET='+c.randomBytes(32).toString('hex'));console.log('JWT_REFRESH_SECRET='+c.randomBytes(32).toString('hex'));\"",
+    "db:backup": "node backup.js",
+    "db:restore": "node restore.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
