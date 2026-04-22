@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto, LoginDto, ResetPasswordDto, ChangePasswordDto } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
+import { MailerService } from '../mailer/mailer.service';
 
 const SALT_ROUNDS = 12;
 const MAX_FAILED_ATTEMPTS = 5;
@@ -23,7 +24,8 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+    private readonly mailerService: MailerService,
+  ) { }
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
@@ -181,11 +183,20 @@ export class AuthService {
       },
     });
 
-    // TODO: Integrate email service to send reset link with resetToken
-    // For now, return token in response (remove in production)
+    // Send password reset email
+    try {
+      await this.mailerService.sendPasswordResetEmail(
+        user.email,
+        user.name,
+        resetToken,
+      );
+    } catch (error) {
+      // Log error but still return success response to prevent email enumeration
+      console.error('Failed to send password reset email:', error);
+    }
+
     return {
       message: 'If the email exists, a password reset link has been sent',
-      resetToken, // Remove this in production — send via email instead
     };
   }
 
