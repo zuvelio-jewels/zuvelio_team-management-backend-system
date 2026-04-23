@@ -67,6 +67,7 @@ export class TasksService {
 
         const task = await this.prisma.task.create({
             data: {
+                title: dto.title,
                 cabin: dto.cabin,
                 taskDetail: dto.taskDetail,
                 completeBy: dto.completeBy,

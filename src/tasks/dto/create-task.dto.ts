@@ -3,6 +3,10 @@ import { IsNotEmpty, IsString, IsInt, IsOptional, IsIn } from 'class-validator';
 export class CreateTaskDto {
     @IsString()
     @IsNotEmpty()
+    title: string;
+
+    @IsString()
+    @IsNotEmpty()
     cabin: string;
 
     @IsString()

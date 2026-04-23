@@ -28,10 +28,19 @@ model User {
   noteHistories      TaskNoteHistory[] @relation("NoteHistoryAuthor")
   attendance         Attendance[]
   leaves             Leave[]
+
+  // Activity Monitoring
+  isMonitoringEnabled Boolean @default(true)
+  lastActivityAt      DateTime?
+  activityEvents      ActivityEvent[]
+  activitySummaries   ActivitySummary[]
+  monitoringConfig    MonitoringConfig?
+  deviceTokens        DeviceToken[]
 }
 
 model Task {
   id            Int       @id @default(autoincrement())
+  title         String    @default("")
   cabin         String
   taskDetail    String
   completeBy    String    // TODAY, TOMORROW, WITHIN_3_DAYS, WITHIN_7_DAYS
@@ -68,16 +77,18 @@ model TaskNoteHistory {
 }
 
 model TaskDocument {
-  id           Int      @id @default(autoincrement())
-  taskId       Int
-  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fileName     String
-  originalName String
-  mimeType     String
-  size         Int
-  uploadedById Int
-  uploadedBy   User     @relation("UploadedDocuments", fields: [uploadedById], references: [id])
-  createdAt    DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  taskId             Int
+  task               Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName           String
+  originalName       String
+  mimeType           String
+  size               Int
+  url                String?  // Cloudinary secure URL
+  cloudinaryPublicId String?  // Cloudinary public_id for deletion
+  uploadedById       Int
+  uploadedBy         User     @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+  createdAt          DateTime @default(now())
 }
 
 model Attendance {
@@ -103,4 +114,104 @@ enum Role {
   ADMIN
   MANAGER
   EMPLOYEE
+}
+
+// Activity Monitoring Models
+
+model ActivityEvent {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  eventType         String    // KEYPRESS, CLICK, MOUSE_MOVE
+  timestamp         DateTime  @default(now())
+  
+  // Keyboard event details
+  keyCode           String?
+  
+  // Mouse event details
+  mouseX            Int?
+  mouseY            Int?
+  clickType         String?   // LEFT, RIGHT, MIDDLE
+  
+  // Task correlation (optional)
+  taskId            Int?
+  
+  // Metadata
+  sessionId         String?   // To group events by browser session
+  
+  createdAt         DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([timestamp])
+  @@index([userId, timestamp])
+  @@index([taskId])
+}
+
+model ActivitySummary {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Time period (hour of the day)
+  date              DateTime
+  hour              Int       // 0-23
+  
+  // Aggregated metrics
+  totalKeystrokes   Int       @default(0)
+  totalClicks       Int       @default(0)
+  totalMouseMovement Int      @default(0)
+  idleTimeMinutes   Int       @default(0)
+  
+  // Task correlation
+  taskId            Int?
+  
+  // Metadata
+  isWorkingHours    Boolean   @default(true)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@unique([userId, date, hour, taskId])
+  @@index([userId])
+  @@index([userId, date])
+  @@index([date])
+}
+
+model MonitoringConfig {
+  id                      Int       @id @default(autoincrement())
+  userId                  Int       @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Monitoring settings
+  isMonitoringEnabled     Boolean   @default(true)
+  
+  // Working hours (in 24-hour format)
+  startWorkHour           Int       @default(9)    // 9 AM
+  endWorkHour             Int       @default(18)   // 6 PM
+  
+  // Idle threshold in minutes
+  idleThresholdMinutes    Int       @default(5)
+  
+  // Department/Team (for bulk operations)
+  departmentId            Int?      // Can add department later
+  
+  // Audit trail
+  createdBy               Int?      // User ID who created this config
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+}
+
+model DeviceToken {
+  id          Int       @id @default(autoincrement())
+  token       String    @unique
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceName  String?
+  isRevoked   Boolean   @default(false)
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
 }

@@ -12,18 +12,24 @@ import {
     BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import { v2 as cloudinary } from 'cloudinary';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import type { Response as ExpressResponse } from 'express';
 import { TaskDocumentsService } from './task-documents.service';
 
-const multerStorage = diskStorage({
-    destination: join(process.cwd(), 'uploads', 'task-documents'),
-    filename: (_req, file, cb) => {
-        const ext = extname(file.originalname);
-        cb(null, `${uuidv4()}${ext}`);
-    },
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const cloudinaryStorage = new CloudinaryStorage({
+    cloudinary,
+    params: {
+        folder: 'zuvelio-task-documents',
+        resource_type: 'auto',
+        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
+    } as any,
 });
 
 const ALLOWED_MIME = [
@@ -49,7 +55,7 @@ export class TaskDocumentsController {
     @Post(':taskId/documents')
     @UseInterceptors(
         FileInterceptor('file', {
-            storage: multerStorage,
+            storage: cloudinaryStorage,
             limits: { fileSize: MAX_FILE_SIZE },
             fileFilter: (_req, file, cb) => {
                 if (!ALLOWED_MIME.includes(file.mimetype)) {
@@ -79,19 +85,15 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Download / view a document */
+    /** Redirect to Cloudinary URL for viewing/downloading */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
         @Res() res: ExpressResponse,
     ) {
-        const { filePath, doc } = await this.docsService.getFilePath(docId);
-        res.setHeader('Content-Type', doc.mimeType);
-        res.setHeader(
-            'Content-Disposition',
-            `attachment; filename="${encodeURIComponent(doc.originalName)}"`,
-        );
-        res.sendFile(filePath);
+        const doc = await this.docsService.getDocument(docId);
+        if (!doc.url) throw new BadRequestException('Document URL not available');
+        return res.redirect(doc.url);
     }
 
     /** Delete a document */

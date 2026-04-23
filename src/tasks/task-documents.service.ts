@@ -4,24 +4,21 @@ import {
     ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import * as path from 'path';
-import * as fs from 'fs';
+import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
 export class TaskDocumentsService {
     constructor(private prisma: PrismaService) { }
-
-    private readonly uploadDir = path.join(process.cwd(), 'uploads', 'task-documents');
 
     async create(
         taskId: number,
         file: Express.Multer.File,
         uploadedById: number,
     ) {
-        // Ensure task exists
         const task = await this.prisma.task.findUnique({ where: { id: taskId } });
         if (!task) throw new NotFoundException('Task not found');
 
+        // CloudinaryStorage sets file.path = secure_url, file.filename = public_id
         return this.prisma.taskDocument.create({
             data: {
                 taskId,
@@ -29,6 +26,8 @@ export class TaskDocumentsService {
                 originalName: file.originalname,
                 mimeType: file.mimetype,
                 size: file.size,
+                url: (file as any).path,
+                cloudinaryPublicId: file.filename,
                 uploadedById,
             },
             include: {
@@ -48,18 +47,13 @@ export class TaskDocumentsService {
         });
     }
 
-    async getFilePath(docId: number): Promise<{ filePath: string; doc: any }> {
+    async getDocument(docId: number) {
         const doc = await this.prisma.taskDocument.findUnique({
             where: { id: docId },
             include: { uploadedBy: { select: { id: true, name: true } } },
         });
         if (!doc) throw new NotFoundException('Document not found');
-
-        const filePath = path.join(this.uploadDir, doc.fileName);
-        if (!fs.existsSync(filePath)) {
-            throw new NotFoundException('File not found on disk');
-        }
-        return { filePath, doc };
+        return doc;
     }
 
     async remove(docId: number, requesterId: number, requesterRole: string) {
@@ -69,7 +63,6 @@ export class TaskDocumentsService {
         });
         if (!doc) throw new NotFoundException('Document not found');
 
-        // Only the uploader, the task assigner, or admin/manager can delete
         const canDelete =
             doc.uploadedById === requesterId ||
             doc.task.allottedFromId === requesterId ||
@@ -78,10 +71,14 @@ export class TaskDocumentsService {
 
         if (!canDelete) throw new ForbiddenException('Not allowed to delete this document');
 
-        // Remove file from disk
-        const filePath = path.join(this.uploadDir, doc.fileName);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
+        // Delete from Cloudinary
+        if (doc.cloudinaryPublicId) {
+            try {
+                const resourceType = doc.mimeType.startsWith('image/') ? 'image' : 'raw';
+                await cloudinary.uploader.destroy(doc.cloudinaryPublicId, { resource_type: resourceType });
+            } catch (err) {
+                console.error('Cloudinary delete error:', err);
+            }
         }
 
         await this.prisma.taskDocument.delete({ where: { id: docId } });
