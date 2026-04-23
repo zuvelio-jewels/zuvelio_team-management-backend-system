@@ -49,6 +49,7 @@ lerna-debug.log*
 # Database backups (keep local only)
 /backups/
 *.sql
+!prisma/migrations/**/*.sql
 
 # Uploaded files
 /uploads/
