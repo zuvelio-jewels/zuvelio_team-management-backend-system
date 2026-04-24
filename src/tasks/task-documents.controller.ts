@@ -55,11 +55,6 @@ export class TaskDocumentsController {
         return (name || 'document').replace(/[\\/:*?"<>|]+/g, '_');
     }
 
-    private buildContentDisposition(name: string): string {
-        const fileName = this.sanitizeDownloadName(name);
-        return `attachment; filename="${fileName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
-    }
-
     /** Upload a document to a task */
     @Post(':taskId/documents')
     @UseInterceptors(
@@ -94,7 +89,7 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Proxy the stored document and force the original download filename */
+    /** Redirect to Cloudinary with fl_attachment flag injected into the stored URL (preserves correct version) */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
@@ -105,19 +100,16 @@ export class TaskDocumentsController {
             throw new BadRequestException('Document URL not available');
         }
 
-        const upstream = await fetch(doc.url);
-        if (!upstream.ok) {
-            throw new BadRequestException('Unable to fetch document from storage');
-        }
+        // doc.url is the Cloudinary secure_url stored at upload time, e.g.:
+        //   https://res.cloudinary.com/{cloud}/raw/upload/v1745491726/zuvelio-task-documents/{id}
+        // We inject fl_attachment:{filename} so the browser downloads with the original name.
+        // We must NOT regenerate the URL with cloudinary.url() because it produces the wrong version (v1).
+        const safeFileName = this.sanitizeDownloadName(doc.originalName || 'document').replace(/ /g, '_');
+        const downloadUrl = doc.url.includes('/upload/')
+            ? doc.url.replace('/upload/', `/upload/fl_attachment:${safeFileName}/`)
+            : doc.url;
 
-        const contentType = upstream.headers.get('content-type') || doc.mimeType || 'application/octet-stream';
-        const buffer = Buffer.from(await upstream.arrayBuffer());
-
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Content-Length', buffer.length.toString());
-        res.setHeader('Content-Disposition', this.buildContentDisposition(doc.originalName || 'document'));
-
-        return res.send(buffer);
+        return res.redirect(downloadUrl);
     }
 
     /** Delete a document */
