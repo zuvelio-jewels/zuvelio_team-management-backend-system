@@ -51,6 +51,10 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export class TaskDocumentsController {
     constructor(private docsService: TaskDocumentsService) { }
 
+    private sanitizeDownloadName(name: string): string {
+        return (name || 'document').replace(/[\\/:*?"<>|]+/g, '_');
+    }
+
     /** Upload a document to a task */
     @Post(':taskId/documents')
     @UseInterceptors(
@@ -92,7 +96,27 @@ export class TaskDocumentsController {
         @Res() res: ExpressResponse,
     ) {
         const doc = await this.docsService.getDocument(docId);
-        if (!doc.url) throw new BadRequestException('Document URL not available');
+        if (!doc.url && !doc.cloudinaryPublicId) {
+            throw new BadRequestException('Document URL not available');
+        }
+
+        if (doc.cloudinaryPublicId) {
+            const resourceType = doc.mimeType.startsWith('image/') ? 'image' : 'raw';
+            const fileName = this.sanitizeDownloadName(doc.originalName || 'document');
+            const downloadUrl = cloudinary.url(doc.cloudinaryPublicId, {
+                secure: true,
+                resource_type: resourceType,
+                type: 'upload',
+                flags: 'attachment',
+                attachment: fileName,
+            });
+            return res.redirect(downloadUrl);
+        }
+
+        if (!doc.url) {
+            throw new BadRequestException('Document URL not available');
+        }
+
         return res.redirect(doc.url);
     }
 
