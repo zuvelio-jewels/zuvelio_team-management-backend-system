@@ -50,7 +50,8 @@ export class ActivityService {
             return { success: true };
         } catch (error) {
             this.logger.error(`Error logging activity for user ${userId}:`, error);
-            return { success: false, error: error.message };
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            return { success: false, error: message };
         }
     }
 
@@ -75,7 +76,8 @@ export class ActivityService {
             return { success: true, acceptedEvents: activityEvents.length };
         } catch (error) {
             this.logger.error(`Error logging activity batch for user ${userId}:`, error);
-            return { success: false, error: error.message, acceptedEvents: 0 };
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            return { success: false, error: message, acceptedEvents: 0 };
         }
     }
 
@@ -544,11 +546,7 @@ export class ActivityService {
 
     // ─── Device Token Management ───────────────────────────────────────────────
 
-    async registerDevice(adminId: number, adminRole: string, userId: number, deviceName?: string) {
-        if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
-            throw new ForbiddenException('Only admins and managers can register devices');
-        }
-
+    private async createDeviceTokenForUser(userId: number, deviceName?: string) {
         const user = await this.prisma.user.findUnique({ where: { id: userId } });
         if (!user) throw new NotFoundException(`User ${userId} not found`);
 
@@ -560,11 +558,24 @@ export class ActivityService {
         });
 
         return {
+            id: device.id,
             token: device.token,
             userId: device.userId,
             deviceName: device.deviceName,
             createdAt: device.createdAt,
         };
+    }
+
+    async registerDevice(adminId: number, adminRole: string, userId: number, deviceName?: string) {
+        if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
+            throw new ForbiddenException('Only admins and managers can register devices');
+        }
+
+        return this.createDeviceTokenForUser(userId, deviceName);
+    }
+
+    async registerSelfDevice(userId: number, deviceName?: string) {
+        return this.createDeviceTokenForUser(userId, deviceName);
     }
 
     async authenticateWithDeviceToken(token: string) {

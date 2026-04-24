@@ -16,7 +16,8 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import JSZip from 'jszip';
 import { ActivityService } from './activity.service';
 import {
     CreateActivityBatchDto,
@@ -176,6 +177,36 @@ export class ActivityController {
         return res.download(envTemplatePath, 'activity-agent.env.example');
     }
 
+    @Post('agent/setup-package')
+    async downloadAgentSetupPackage(
+        @Req() req,
+        @Body() dto: RegisterDeviceDto,
+        @Res() res: Response,
+    ) {
+        if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+            throw new ForbiddenException('Only admins and managers can generate setup packages');
+        }
+
+        const device = await this.activityService.registerDevice(
+            req.user.id,
+            req.user.role,
+            dto.userId,
+            dto.deviceName,
+        );
+
+        return this.sendSetupPackage(res, req, device.token, dto.userId);
+    }
+
+    @Get('agent/self-setup')
+    async downloadSelfSetupPackage(
+        @Req() req,
+        @Query('deviceName') deviceName: string,
+        @Res() res: Response,
+    ) {
+        const device = await this.activityService.registerSelfDevice(req.user.id, deviceName);
+        return this.sendSetupPackage(res, req, device.token, req.user.id);
+    }
+
     // ─── Device Token Endpoints ────────────────────────────────────────────────
 
     @Post('agent/register-device')
@@ -213,5 +244,69 @@ export class ActivityController {
         @Body('enabled') enabled: boolean,
     ) {
         return this.activityService.toggleEmployeeMonitoring(req.user.role, targetId, enabled);
+    }
+
+    private async sendSetupPackage(res: Response, req: any, deviceToken: string, userId: number) {
+        const exePath = join(
+            process.cwd(),
+            '..',
+            'activity-monitor-agent',
+            'dist',
+            'zuvelio-activity-agent.exe',
+        );
+
+        const installerPath = join(
+            process.cwd(),
+            '..',
+            'activity-monitor-agent',
+            'INSTALL_OFFICE_TRACKING.bat',
+        );
+
+        const readmePath = join(
+            process.cwd(),
+            '..',
+            'activity-monitor-agent',
+            'README_USER.txt',
+        );
+
+        if (!existsSync(exePath)) {
+            throw new NotFoundException('Desktop agent executable not found');
+        }
+
+        if (!existsSync(installerPath)) {
+            throw new NotFoundException('Office installer script not found');
+        }
+
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        const protocol = Array.isArray(forwardedProto)
+            ? forwardedProto[0]
+            : forwardedProto || req.protocol || 'https';
+        const host = req.get('host');
+        const apiUrl = process.env.ACTIVITY_AGENT_API_URL || `${protocol}://${host}/api`;
+
+        const envContent = [
+            `API_URL=${apiUrl}`,
+            `DEVICE_TOKEN=${deviceToken}`,
+            'FLUSH_INTERVAL_MS=5000',
+            'MOUSE_MOVE_SAMPLE_MS=1000',
+            'IDLE_THRESHOLD_MS=300000',
+            'SESSION_ID=desktop-agent',
+            '',
+        ].join('\n');
+
+        const zip = new JSZip();
+        zip.file('zuvelio-activity-agent.exe', readFileSync(exePath));
+        zip.file('INSTALL_OFFICE_TRACKING.bat', readFileSync(installerPath, 'utf8'));
+        if (existsSync(readmePath)) {
+            zip.file('README_USER.txt', readFileSync(readmePath, 'utf8'));
+        }
+        zip.file('.env', envContent);
+
+        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+        const fileName = `zuvelio-activity-setup-user-${userId}.zip`;
+
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        return res.send(zipBuffer);
     }
 }
