@@ -103,10 +103,17 @@ export class TaskDocumentsController {
         });
 
         // Derive resource_type from the stored Cloudinary URL
-        // (more reliable than mimeType since Cloudinary auto-classifies on upload)
         let resourceType = 'raw';
         if (doc.url.includes('/image/upload/')) resourceType = 'image';
         else if (doc.url.includes('/video/upload/')) resourceType = 'video';
+
+        // Extract the real version number from the stored URL (e.g. v1777021736).
+        // CRITICAL: Cloudinary's HMAC signature is computed against the path that
+        // includes the version. If the version is missing or wrong the signature
+        // won't match and Cloudinary returns 401 even for type:'upload' resources
+        // when "Require signed URLs" is enabled on the account.
+        const versionMatch = doc.url.match(/\/v(\d+)\//);
+        const version = versionMatch ? parseInt(versionMatch[1], 10) : undefined;
 
         // For image/video, extract the format extension from the stored URL
         let format: string | undefined;
@@ -116,23 +123,36 @@ export class TaskDocumentsController {
             if (dotIdx !== -1) format = lastSegment.slice(dotIdx + 1);
         }
 
-        // Generate a signed CDN delivery URL.
-        // sign_url:true adds an HMAC signature accepted by Cloudinary CDN even when
-        // the account has "Require signed URLs" restriction enabled.
-        // private_download_url is for type:'private' resources — ours are type:'upload'.
+        // Generate a correctly-signed CDN URL.
+        // version: extracted real version ensures the signature matches exactly.
+        // force_version: false prevents the SDK overriding the version to a placeholder.
         const signedUrl = cloudinary.url(doc.cloudinaryPublicId, {
             secure: true,
             sign_url: true,
             resource_type: resourceType,
             type: 'upload',
+            ...(version ? { version } : {}),
+            force_version: false,
             ...(format ? { format } : {}),
         });
 
-        // Fetch the signed URL server-side (Railway → Cloudinary CDN).
-        // This means the browser never touches Cloudinary at all — no CORS, no auth issues.
+        // Fetch server-side (Railway → Cloudinary CDN) so the browser never
+        // touches Cloudinary — no CORS, no auth issues on the client side.
         const upstream = await fetch(signedUrl);
         if (!upstream.ok) {
-            throw new BadRequestException(`Storage error: ${upstream.status}`);
+            // Fallback: try the raw stored URL (works if account doesn't enforce signing)
+            const fallback = await fetch(doc.url);
+            if (!fallback.ok) {
+                throw new BadRequestException(`Storage error: ${fallback.status}`);
+            }
+            const fbType = doc.mimeType || fallback.headers.get('content-type') || 'application/octet-stream';
+            const fbBuf = Buffer.from(await fallback.arrayBuffer());
+            const safeNameFb = (doc.originalName ?? 'document').replace(/"/g, '\\"');
+            res.setHeader('Content-Type', fbType);
+            res.setHeader('Content-Length', fbBuf.length.toString());
+            res.setHeader('Content-Disposition', `attachment; filename="${safeNameFb}"`);
+            res.setHeader('Cache-Control', 'no-store');
+            return res.send(fbBuf);
         }
 
         const contentType = doc.mimeType
@@ -140,7 +160,6 @@ export class TaskDocumentsController {
             || 'application/octet-stream';
         const buffer = Buffer.from(await upstream.arrayBuffer());
 
-        // Force the browser to download with the original file name and extension
         const safeFileName = (doc.originalName ?? 'document').replace(/"/g, '\\"');
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Length', buffer.length.toString());
