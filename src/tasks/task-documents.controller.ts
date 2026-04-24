@@ -85,7 +85,7 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Download a task document — streams the file from Cloudinary via a signed URL */
+    /** Download a task document — fetches via Cloudinary API endpoint (bypasses CDN access restrictions) */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
@@ -107,52 +107,61 @@ export class TaskDocumentsController {
         if (doc.url.includes('/image/upload/')) resourceType = 'image';
         else if (doc.url.includes('/video/upload/')) resourceType = 'video';
 
-        // Extract the real version number from the stored URL (e.g. v1777021736).
-        // CRITICAL: Cloudinary's HMAC signature is computed against the path that
-        // includes the version. If the version is missing or wrong the signature
-        // won't match and Cloudinary returns 401 even for type:'upload' resources
-        // when "Require signed URLs" is enabled on the account.
-        const versionMatch = doc.url.match(/\/v(\d+)\//);
-        const version = versionMatch ? parseInt(versionMatch[1], 10) : undefined;
+        // Map MIME type → Cloudinary format string for cases where the URL
+        // has no extension (e.g. PDFs stored as Cloudinary image resources).
+        const MIME_TO_FORMAT: Record<string, string> = {
+            'application/pdf': 'pdf',
+            'image/jpeg': 'jpg',
+            'image/png': 'png',
+            'image/gif': 'gif',
+            'image/webp': 'webp',
+            'application/msword': 'doc',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+            'application/vnd.ms-excel': 'xls',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+            'text/plain': 'txt',
+        };
 
-        // For image/video, extract the format extension from the stored URL
-        let format: string | undefined;
+        // Extract format (file extension) for non-raw resources.
+        // Raw resources (txt, csv, etc.) have no extension in their Cloudinary URL.
+        // For PDFs stored as image resources the URL also has no extension,
+        // so fall back to the MIME-type mapping.
+        let format = '';
         if (resourceType !== 'raw') {
             const lastSegment = doc.url.split('?')[0].split('/').pop() ?? '';
             const dotIdx = lastSegment.lastIndexOf('.');
-            if (dotIdx !== -1) format = lastSegment.slice(dotIdx + 1);
+            if (dotIdx !== -1) {
+                format = lastSegment.slice(dotIdx + 1);
+            } else if (doc.mimeType) {
+                format = MIME_TO_FORMAT[doc.mimeType] ?? '';
+            }
         }
 
-        // Generate a correctly-signed CDN URL.
-        // version: extracted real version ensures the signature matches exactly.
-        // force_version: false prevents the SDK overriding the version to a placeholder.
-        const signedUrl = cloudinary.url(doc.cloudinaryPublicId, {
-            secure: true,
-            sign_url: true,
-            resource_type: resourceType,
-            type: 'upload',
-            ...(version ? { version } : {}),
-            force_version: false,
-            ...(format ? { format } : {}),
-        });
+        // private_download_url with type:'upload' generates a URL to
+        // https://api.cloudinary.com/v1_1/{cloud}/{resource_type}/download
+        // — the Cloudinary API server, NOT the CDN (res.cloudinary.com).
+        // The URL is signed with api_key + api_secret via the full API signing method,
+        // which is completely separate from CDN URL signing and bypasses all
+        // CDN-level access restrictions (signed-URL enforcement, IP restrictions, etc.).
+        //
+        // KEY DIFFERENCE from previous attempts:
+        //   type:'private' (old attempt) → 404 because resources are type:'upload'
+        //   type:'upload'  (this fix)    → correct — matches how files were stored
+        const apiDownloadUrl = (cloudinary.utils as any).private_download_url(
+            doc.cloudinaryPublicId,
+            format,
+            {
+                resource_type: resourceType,
+                type: 'upload',
+                expires_at: Math.floor(Date.now() / 1000) + 300, // 5-min expiry
+            },
+        );
 
-        // Fetch server-side (Railway → Cloudinary CDN) so the browser never
-        // touches Cloudinary — no CORS, no auth issues on the client side.
-        const upstream = await fetch(signedUrl);
+        // Fetch server-side: Railway → api.cloudinary.com (authenticated)
+        // The browser never touches Cloudinary at all.
+        const upstream = await fetch(apiDownloadUrl);
         if (!upstream.ok) {
-            // Fallback: try the raw stored URL (works if account doesn't enforce signing)
-            const fallback = await fetch(doc.url);
-            if (!fallback.ok) {
-                throw new BadRequestException(`Storage error: ${fallback.status}`);
-            }
-            const fbType = doc.mimeType || fallback.headers.get('content-type') || 'application/octet-stream';
-            const fbBuf = Buffer.from(await fallback.arrayBuffer());
-            const safeNameFb = (doc.originalName ?? 'document').replace(/"/g, '\\"');
-            res.setHeader('Content-Type', fbType);
-            res.setHeader('Content-Length', fbBuf.length.toString());
-            res.setHeader('Content-Disposition', `attachment; filename="${safeNameFb}"`);
-            res.setHeader('Cache-Control', 'no-store');
-            return res.send(fbBuf);
+            throw new BadRequestException(`Storage fetch error: ${upstream.status}`);
         }
 
         const contentType = doc.mimeType
@@ -160,6 +169,7 @@ export class TaskDocumentsController {
             || 'application/octet-stream';
         const buffer = Buffer.from(await upstream.arrayBuffer());
 
+        // Force download with the exact original filename and extension
         const safeFileName = (doc.originalName ?? 'document').replace(/"/g, '\\"');
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Length', buffer.length.toString());
