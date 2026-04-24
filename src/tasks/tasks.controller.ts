@@ -53,6 +53,15 @@ export class TasksController {
         return this.tasksService.findNoteHistory(id);
     }
 
+    @Post(':id/notes')
+    addNote(
+        @Param('id', ParseIntPipe) id: number,
+        @Body('note') note: string,
+        @Request() req: any,
+    ) {
+        return this.tasksService.createNote(id, note, req.user.id);
+    }
+
     @Patch(':id')
     update(
         @Param('id', ParseIntPipe) id: number,

@@ -3,6 +3,10 @@ import { IsOptional, IsString, IsIn, IsBoolean } from 'class-validator';
 export class UpdateTaskDto {
     @IsOptional()
     @IsString()
+    title?: string;
+
+    @IsOptional()
+    @IsString()
     cabin?: string;
 
     @IsOptional()

@@ -185,6 +185,15 @@ export class TasksService {
         return this.prisma.task.delete({ where: { id } });
     }
 
+    async createNote(taskId: number, note: string, authorId: number) {
+        const task = await this.prisma.task.findUnique({ where: { id: taskId } });
+        if (!task) throw new NotFoundException('Task not found');
+        return this.prisma.taskNoteHistory.create({
+            data: { taskId, note, authorId },
+            include: { author: { select: { id: true, name: true } } },
+        });
+    }
+
     async findNoteHistory(taskId: number) {
         return this.prisma.taskNoteHistory.findMany({
             where: { taskId },

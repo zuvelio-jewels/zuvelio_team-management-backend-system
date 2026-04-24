@@ -17,20 +17,20 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import type { Response as ExpressResponse } from 'express';
 import { TaskDocumentsService } from './task-documents.service';
 
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-const cloudinaryStorage = new CloudinaryStorage({
-    cloudinary,
-    params: {
-        folder: 'zuvelio-task-documents',
-        resource_type: 'auto',
-        allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt'],
-    } as any,
-});
+function getCloudinaryStorage() {
+    cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+    return new CloudinaryStorage({
+        cloudinary,
+        params: {
+            folder: 'zuvelio-task-documents',
+            resource_type: 'auto',
+        } as any,
+    });
+}
 
 const ALLOWED_MIME = [
     'image/jpeg',
@@ -55,7 +55,7 @@ export class TaskDocumentsController {
     @Post(':taskId/documents')
     @UseInterceptors(
         FileInterceptor('file', {
-            storage: cloudinaryStorage,
+            storage: getCloudinaryStorage(),
             limits: { fileSize: MAX_FILE_SIZE },
             fileFilter: (_req, file, cb) => {
                 if (!ALLOWED_MIME.includes(file.mimetype)) {

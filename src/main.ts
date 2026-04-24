@@ -1,3 +1,8 @@
+import * as path from 'path';
+import * as dotenv from 'dotenv';
+// Load .env before any module decorator is evaluated
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
