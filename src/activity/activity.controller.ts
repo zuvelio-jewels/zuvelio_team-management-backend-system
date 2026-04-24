@@ -269,14 +269,6 @@ export class ActivityController {
             'README_USER.txt',
         );
 
-        if (!existsSync(exePath)) {
-            throw new NotFoundException('Desktop agent executable not found');
-        }
-
-        if (!existsSync(installerPath)) {
-            throw new NotFoundException('Office installer script not found');
-        }
-
         const forwardedProto = req.headers['x-forwarded-proto'];
         const protocol = Array.isArray(forwardedProto)
             ? forwardedProto[0]
@@ -295,12 +287,48 @@ export class ActivityController {
         ].join('\n');
 
         const zip = new JSZip();
-        zip.file('zuvelio-activity-agent.exe', readFileSync(exePath));
-        zip.file('INSTALL_OFFICE_TRACKING.bat', readFileSync(installerPath, 'utf8'));
+
+        // ── Agent executable: local file → env URL → omit ────────────────────
+        if (existsSync(exePath)) {
+            zip.file('zuvelio-activity-agent.exe', readFileSync(exePath));
+        } else if (process.env.AGENT_EXE_URL) {
+            const exeRes = await fetch(process.env.AGENT_EXE_URL);
+            if (exeRes.ok) {
+                zip.file('zuvelio-activity-agent.exe', Buffer.from(await exeRes.arrayBuffer()));
+            }
+        }
+
+        // ── Installer script: local file → env URL → omit ────────────────────
+        if (existsSync(installerPath)) {
+            zip.file('INSTALL_OFFICE_TRACKING.bat', readFileSync(installerPath, 'utf8'));
+        } else if (process.env.AGENT_INSTALLER_URL) {
+            const batRes = await fetch(process.env.AGENT_INSTALLER_URL);
+            if (batRes.ok) {
+                zip.file('INSTALL_OFFICE_TRACKING.bat', await batRes.text());
+            }
+        }
+
+        // ── Optional readme ───────────────────────────────────────────────────
         if (existsSync(readmePath)) {
             zip.file('README_USER.txt', readFileSync(readmePath, 'utf8'));
         }
+
+        // ── Always include pre-configured .env ───────────────────────────────
         zip.file('.env', envContent);
+
+        // ── Setup instructions ────────────────────────────────────────────────
+        const instructions = [
+            'ZUVELIO ACTIVITY AGENT — SETUP INSTRUCTIONS',
+            '============================================',
+            '',
+            '1. Place the .env file in the same folder as zuvelio-activity-agent.exe',
+            '2. Run INSTALL_OFFICE_TRACKING.bat as Administrator (if included)',
+            '3. Launch zuvelio-activity-agent.exe',
+            '',
+            'If the exe is not included, ask your administrator for the download link.',
+            '',
+        ].join('\n');
+        zip.file('SETUP_INSTRUCTIONS.txt', instructions);
 
         const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
         const fileName = `zuvelio-activity-setup-user-${userId}.zip`;
