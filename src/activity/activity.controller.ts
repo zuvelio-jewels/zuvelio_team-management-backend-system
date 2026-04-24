@@ -247,27 +247,25 @@ export class ActivityController {
     }
 
     private async sendSetupPackage(res: Response, req: any, deviceToken: string, userId: number) {
-        const exePath = join(
-            process.cwd(),
-            '..',
-            'activity-monitor-agent',
-            'dist',
-            'zuvelio-activity-agent.exe',
-        );
+        const agentRoot = join(process.cwd(), '..', 'activity-monitor-agent');
+        const pickExisting = (paths: string[]) => paths.find((p) => existsSync(p));
 
-        const installerPath = join(
-            process.cwd(),
-            '..',
-            'activity-monitor-agent',
-            'INSTALL_OFFICE_TRACKING.bat',
-        );
+        const exePath = pickExisting([
+            join(agentRoot, 'dist', 'zuvelio-activity-agent.exe'),
+            join(agentRoot, 'zuvelio-activity-agent.exe'),
+        ]);
 
-        const readmePath = join(
-            process.cwd(),
-            '..',
-            'activity-monitor-agent',
-            'README_USER.txt',
-        );
+        const installerPath = pickExisting([
+            join(agentRoot, 'INSTALL_OFFICE_TRACKING.bat'),
+        ]);
+
+        const oneClickPath = pickExisting([
+            join(agentRoot, 'ONE_CLICK_INSTALL.bat'),
+        ]);
+
+        const readmePath = pickExisting([
+            join(agentRoot, 'README_USER.txt'),
+        ]);
 
         const forwardedProto = req.headers['x-forwarded-proto'];
         const protocol = Array.isArray(forwardedProto)
@@ -289,7 +287,7 @@ export class ActivityController {
         const zip = new JSZip();
 
         // ── Agent executable: local file → env URL → omit ────────────────────
-        if (existsSync(exePath)) {
+        if (exePath) {
             zip.file('zuvelio-activity-agent.exe', readFileSync(exePath));
         } else if (process.env.AGENT_EXE_URL) {
             const exeRes = await fetch(process.env.AGENT_EXE_URL);
@@ -299,17 +297,66 @@ export class ActivityController {
         }
 
         // ── Installer script: local file → env URL → omit ────────────────────
-        if (existsSync(installerPath)) {
+        if (installerPath) {
             zip.file('INSTALL_OFFICE_TRACKING.bat', readFileSync(installerPath, 'utf8'));
         } else if (process.env.AGENT_INSTALLER_URL) {
             const batRes = await fetch(process.env.AGENT_INSTALLER_URL);
             if (batRes.ok) {
                 zip.file('INSTALL_OFFICE_TRACKING.bat', await batRes.text());
             }
+        } else {
+            const fallbackInstaller = [
+                '@echo off',
+                'setlocal',
+                '',
+                'net session >nul 2>&1',
+                'if %errorlevel% neq 0 (',
+                '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -Verb RunAs"',
+                '    exit /b',
+                ')',
+                '',
+                'if not exist "zuvelio-activity-agent.exe" (',
+                '    echo ERROR: zuvelio-activity-agent.exe is missing.',
+                '    pause',
+                '    exit /b 1',
+                ')',
+                '',
+                'if not exist ".env" (',
+                '    echo ERROR: .env is missing.',
+                '    pause',
+                '    exit /b 1',
+                ')',
+                '',
+                'set INSTALL_DIR=%ProgramFiles%\\Zuvelio\\ActivityAgent',
+                'if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"',
+                'copy /Y "zuvelio-activity-agent.exe" "%INSTALL_DIR%\\" >nul',
+                'copy /Y ".env" "%INSTALL_DIR%\\.env" >nul',
+                'cd /d "%INSTALL_DIR%"',
+                'zuvelio-activity-agent.exe --install',
+                'start "" zuvelio-activity-agent.exe',
+                'echo Installation complete.',
+                'pause',
+                '',
+            ].join('\n');
+
+            zip.file('INSTALL_OFFICE_TRACKING.bat', fallbackInstaller);
+        }
+
+        // ── One-click launcher: local file → generated fallback ─────────────
+        if (oneClickPath) {
+            zip.file('ONE_CLICK_INSTALL.bat', readFileSync(oneClickPath, 'utf8'));
+        } else {
+            const oneClickFallback = [
+                '@echo off',
+                'cd /d "%~dp0"',
+                'call "INSTALL_OFFICE_TRACKING.bat"',
+                '',
+            ].join('\n');
+            zip.file('ONE_CLICK_INSTALL.bat', oneClickFallback);
         }
 
         // ── Optional readme ───────────────────────────────────────────────────
-        if (existsSync(readmePath)) {
+        if (readmePath) {
             zip.file('README_USER.txt', readFileSync(readmePath, 'utf8'));
         }
 
@@ -321,11 +368,12 @@ export class ActivityController {
             'ZUVELIO ACTIVITY AGENT — SETUP INSTRUCTIONS',
             '============================================',
             '',
-            '1. Place the .env file in the same folder as zuvelio-activity-agent.exe',
-            '2. Run INSTALL_OFFICE_TRACKING.bat as Administrator (if included)',
-            '3. Launch zuvelio-activity-agent.exe',
+            '1. Keep all files in one folder',
+            '2. Double-click ONE_CLICK_INSTALL.bat',
+            '3. Click Yes on the Windows admin prompt',
+            '4. Wait for installation complete message',
             '',
-            'If the exe is not included, ask your administrator for the download link.',
+            'If zuvelio-activity-agent.exe is not included, ask your administrator for the download link.',
             '',
         ].join('\n');
         zip.file('SETUP_INSTRUCTIONS.txt', instructions);
