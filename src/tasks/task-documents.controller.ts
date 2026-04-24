@@ -85,7 +85,7 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Download a task document via a Cloudinary signed private-download URL */
+    /** Download a task document — streams the file from Cloudinary via a signed URL */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
@@ -96,42 +96,57 @@ export class TaskDocumentsController {
             throw new BadRequestException('Document URL not available');
         }
 
-        // Must configure credentials here because this runs per-request on Railway
         cloudinary.config({
             cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
             api_key: process.env.CLOUDINARY_API_KEY,
             api_secret: process.env.CLOUDINARY_API_SECRET,
         });
 
-        // Derive resource_type from the stored URL — more reliable than mimeType
-        // because Cloudinary auto-classifies on upload (e.g. PDF may land as 'image')
+        // Derive resource_type from the stored Cloudinary URL
+        // (more reliable than mimeType since Cloudinary auto-classifies on upload)
         let resourceType = 'raw';
         if (doc.url.includes('/image/upload/')) resourceType = 'image';
         else if (doc.url.includes('/video/upload/')) resourceType = 'video';
 
-        // For non-raw resources Cloudinary needs the format (file extension) separately
-        let format = '';
+        // For image/video, extract the format extension from the stored URL
+        let format: string | undefined;
         if (resourceType !== 'raw') {
-            // Extract extension from stored URL path, e.g. ".pdf" → "pdf"
             const lastSegment = doc.url.split('?')[0].split('/').pop() ?? '';
             const dotIdx = lastSegment.lastIndexOf('.');
             if (dotIdx !== -1) format = lastSegment.slice(dotIdx + 1);
         }
 
-        // private_download_url generates a time-limited signed URL routed through
-        // api.cloudinary.com (not the CDN), so it works even when the Cloudinary
-        // account has CDN access restrictions or requires signed delivery.
-        const signedUrl = (cloudinary.utils as any).private_download_url(
-            doc.cloudinaryPublicId,
-            format,
-            {
-                resource_type: resourceType,
-                attachment: doc.originalName ?? 'document',
-                expires_at: Math.floor(Date.now() / 1000) + 300, // 5 min
-            },
-        );
+        // Generate a signed CDN delivery URL.
+        // sign_url:true adds an HMAC signature accepted by Cloudinary CDN even when
+        // the account has "Require signed URLs" restriction enabled.
+        // private_download_url is for type:'private' resources — ours are type:'upload'.
+        const signedUrl = cloudinary.url(doc.cloudinaryPublicId, {
+            secure: true,
+            sign_url: true,
+            resource_type: resourceType,
+            type: 'upload',
+            ...(format ? { format } : {}),
+        });
 
-        return res.redirect(signedUrl);
+        // Fetch the signed URL server-side (Railway → Cloudinary CDN).
+        // This means the browser never touches Cloudinary at all — no CORS, no auth issues.
+        const upstream = await fetch(signedUrl);
+        if (!upstream.ok) {
+            throw new BadRequestException(`Storage error: ${upstream.status}`);
+        }
+
+        const contentType = doc.mimeType
+            || upstream.headers.get('content-type')
+            || 'application/octet-stream';
+        const buffer = Buffer.from(await upstream.arrayBuffer());
+
+        // Force the browser to download with the original file name and extension
+        const safeFileName = (doc.originalName ?? 'document').replace(/"/g, '\\"');
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Length', buffer.length.toString());
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFileName}"`);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.send(buffer);
     }
 
     /** Delete a document */
