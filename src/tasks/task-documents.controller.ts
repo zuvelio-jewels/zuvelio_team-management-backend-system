@@ -85,22 +85,53 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Download a task document — the frontend fetches this as a blob and saves it with a.download=originalName */
+    /** Download a task document via a Cloudinary signed private-download URL */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
         @Res() res: ExpressResponse,
     ) {
         const doc = await this.docsService.getDocument(docId);
-        if (!doc.url) {
+        if (!doc.url || !doc.cloudinaryPublicId) {
             throw new BadRequestException('Document URL not available');
         }
 
-        // Redirect to the plain Cloudinary URL with no transformations.
-        // The frontend fetches this as a blob (responseType:'blob') and uses
-        // a.download = doc.originalName to force the correct filename on disk.
-        // No fl_attachment manipulation needed — that causes 400s from Cloudinary.
-        return res.redirect(doc.url);
+        // Must configure credentials here because this runs per-request on Railway
+        cloudinary.config({
+            cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+            api_key: process.env.CLOUDINARY_API_KEY,
+            api_secret: process.env.CLOUDINARY_API_SECRET,
+        });
+
+        // Derive resource_type from the stored URL — more reliable than mimeType
+        // because Cloudinary auto-classifies on upload (e.g. PDF may land as 'image')
+        let resourceType = 'raw';
+        if (doc.url.includes('/image/upload/')) resourceType = 'image';
+        else if (doc.url.includes('/video/upload/')) resourceType = 'video';
+
+        // For non-raw resources Cloudinary needs the format (file extension) separately
+        let format = '';
+        if (resourceType !== 'raw') {
+            // Extract extension from stored URL path, e.g. ".pdf" → "pdf"
+            const lastSegment = doc.url.split('?')[0].split('/').pop() ?? '';
+            const dotIdx = lastSegment.lastIndexOf('.');
+            if (dotIdx !== -1) format = lastSegment.slice(dotIdx + 1);
+        }
+
+        // private_download_url generates a time-limited signed URL routed through
+        // api.cloudinary.com (not the CDN), so it works even when the Cloudinary
+        // account has CDN access restrictions or requires signed delivery.
+        const signedUrl = (cloudinary.utils as any).private_download_url(
+            doc.cloudinaryPublicId,
+            format,
+            {
+                resource_type: resourceType,
+                attachment: doc.originalName ?? 'document',
+                expires_at: Math.floor(Date.now() / 1000) + 300, // 5 min
+            },
+        );
+
+        return res.redirect(signedUrl);
     }
 
     /** Delete a document */
