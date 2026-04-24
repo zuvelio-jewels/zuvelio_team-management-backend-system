@@ -51,10 +51,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 export class TaskDocumentsController {
     constructor(private docsService: TaskDocumentsService) { }
 
-    private sanitizeDownloadName(name: string): string {
-        return (name || 'document').replace(/[\\/:*?"<>|]+/g, '_');
-    }
-
     /** Upload a document to a task */
     @Post(':taskId/documents')
     @UseInterceptors(
@@ -89,7 +85,7 @@ export class TaskDocumentsController {
         return this.docsService.findAllByTask(taskId);
     }
 
-    /** Redirect to Cloudinary with fl_attachment flag injected into the stored URL (preserves correct version) */
+    /** Download a task document — the frontend fetches this as a blob and saves it with a.download=originalName */
     @Get('documents/:docId/download')
     async downloadDocument(
         @Param('docId', ParseIntPipe) docId: number,
@@ -100,16 +96,11 @@ export class TaskDocumentsController {
             throw new BadRequestException('Document URL not available');
         }
 
-        // doc.url is the Cloudinary secure_url stored at upload time, e.g.:
-        //   https://res.cloudinary.com/{cloud}/raw/upload/v1745491726/zuvelio-task-documents/{id}
-        // We inject fl_attachment:{filename} so the browser downloads with the original name.
-        // We must NOT regenerate the URL with cloudinary.url() because it produces the wrong version (v1).
-        const safeFileName = this.sanitizeDownloadName(doc.originalName || 'document').replace(/ /g, '_');
-        const downloadUrl = doc.url.includes('/upload/')
-            ? doc.url.replace('/upload/', `/upload/fl_attachment:${safeFileName}/`)
-            : doc.url;
-
-        return res.redirect(downloadUrl);
+        // Redirect to the plain Cloudinary URL with no transformations.
+        // The frontend fetches this as a blob (responseType:'blob') and uses
+        // a.download = doc.originalName to force the correct filename on disk.
+        // No fl_attachment manipulation needed — that causes 400s from Cloudinary.
+        return res.redirect(doc.url);
     }
 
     /** Delete a document */
