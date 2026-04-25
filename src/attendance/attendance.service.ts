@@ -138,6 +138,7 @@ export class AttendanceService {
       const record = latestByName.get(this.normalizeName(user.name));
       const normalized = record ? this.normalizePunchTimes(record) : null;
       const attendanceStatus = this.getAvailabilityStatus(record, normalized);
+      const dateIso = record ? this.toIsoDateTime(record.DateString) : null;
 
       return {
         ...user,
@@ -148,9 +149,9 @@ export class AttendanceService {
           : null,
         empcode: record ? this.normalizeEmpcode(record.Empcode) : null,
         sourceStatus: record?.Status ?? null,
-        date: record ? this.toIsoDateTime(record.DateString) : null,
-        checkIn: normalized?.checkIn ?? null,
-        checkOut: normalized?.checkOut ?? null,
+        date: dateIso,
+        checkIn: normalized ? this.combineDateTime(dateIso, normalized.checkIn) : null,
+        checkOut: normalized ? this.combineDateTime(dateIso, normalized.checkOut) : null,
       };
     });
   }
@@ -216,6 +217,11 @@ export class AttendanceService {
 
   private mapExternalRecord(record: ExternalAttendanceItem, id: number) {
     const normalized = this.normalizePunchTimes(record);
+    const dateString = this.toIsoDateTime(record.DateString);
+
+    // Combine date with time to create full ISO datetime strings
+    const checkInDateTime = this.combineDateTime(dateString, normalized.checkIn);
+    const checkOutDateTime = this.combineDateTime(dateString, normalized.checkOut);
 
     return {
       id,
@@ -223,9 +229,9 @@ export class AttendanceService {
       empcode: this.normalizeEmpcode(record.Empcode),
       name: record.Name,
       status: record.Status,
-      date: this.toIsoDateTime(record.DateString),
-      checkIn: normalized.checkIn,
-      checkOut: normalized.checkOut,
+      date: dateString,
+      checkIn: checkInDateTime,
+      checkOut: checkOutDateTime,
     };
   }
 
@@ -295,6 +301,27 @@ export class AttendanceService {
     }
 
     return new Date(year, month - 1, day).toISOString();
+  }
+
+  private combineDateTime(dateIso: string | null, timeString: string): string | null {
+    if (!dateIso) return null;
+    if (timeString === 'WO' || timeString === 'A' || timeString === '00:00') {
+      return null;
+    }
+
+    try {
+      const date = new Date(dateIso);
+      const [hours, minutes] = timeString.split(':').map(Number);
+
+      if (isNaN(hours) || isNaN(minutes)) {
+        return null;
+      }
+
+      date.setHours(hours, minutes, 0, 0);
+      return date.toISOString();
+    } catch (e) {
+      return null;
+    }
   }
 
   private getTodayRange(now: Date) {
