@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { Role } from '@prisma/client';
 import {
   RegisterDto,
   LoginDto,
@@ -77,9 +78,18 @@ export class AuthService {
     }
 
     if (!user.isApproved) {
-      throw new UnauthorizedException(
-        'Your account is pending admin approval. Please wait for an admin to approve your account.',
-      );
+      // Recovery path for existing production admins created before approval flow.
+      if (user.role === Role.ADMIN && user.isActive) {
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { isApproved: true },
+        });
+        user.isApproved = true;
+      } else {
+        throw new UnauthorizedException(
+          'Your account is pending admin approval. Please wait for an admin to approve your account.',
+        );
+      }
     }
 
     if (!user.isActive) {
