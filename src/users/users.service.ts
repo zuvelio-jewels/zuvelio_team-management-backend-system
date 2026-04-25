@@ -4,7 +4,7 @@ import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -22,14 +22,21 @@ export class UsersService {
   }
 
   async findPendingApproval() {
+    // Return all unapproved users:
+    // - Newly registered (isApproved: false, isActive: false)
+    // - Legacy users from before approval system (isApproved: false, isActive: true)
     return this.prisma.user.findMany({
-      where: { isApproved: false, isActive: false },
+      where: {
+        isApproved: false,
+        // Include both inactive (pending) and active (legacy) users
+      },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
         createdAt: true,
+        isActive: true, // Include this to show which are legacy vs new
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -101,7 +108,7 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
 
     try {
-      // For pending users, first unassign any tasks if they somehow have any
+      // For pending users, first unassign any tasks and documents if they somehow have any
       await this.prisma.task.updateMany({
         where: {
           OR: [{ assignedToId: id }, { allottedFromId: id }],
@@ -112,11 +119,17 @@ export class UsersService {
         },
       });
 
+      // Unassign any documents uploaded by this user
+      await this.prisma.taskDocument.updateMany({
+        where: { uploadedById: id },
+        data: { uploadedById: undefined },
+      });
+
       // Delete the user record entirely on rejection
       await this.prisma.user.delete({ where: { id } });
       return { message: 'User registration rejected and removed' };
     } catch (error) {
-      if (error.code === '23503' || error.code === '23001') {
+      if (error instanceof Object && 'code' in error && (error.code === '23503' || error.code === '23001')) {
         throw new BadRequestException(
           'Cannot reject user: User has dependencies. Please delete assigned tasks first.',
         );
@@ -142,11 +155,17 @@ export class UsersService {
         },
       });
 
+      // Unassign any documents uploaded by this user
+      await this.prisma.taskDocument.updateMany({
+        where: { uploadedById: id },
+        data: { uploadedById: undefined },
+      });
+
       // Now delete the user safely
       await this.prisma.user.delete({ where: { id } });
       return { message: 'User deleted successfully. Associated tasks have been unassigned.' };
     } catch (error) {
-      if (error.code === '23503' || error.code === '23001') {
+      if (error instanceof Object && 'code' in error && (error.code === '23503' || error.code === '23001')) {
         throw new BadRequestException(
           'Cannot delete user: User has dependencies in the system. Please contact support.',
         );

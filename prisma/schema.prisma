@@ -90,8 +90,8 @@ model TaskDocument {
   size               Int
   url                String?  // Cloudinary secure URL
   cloudinaryPublicId String?  // Cloudinary public_id for deletion
-  uploadedById       Int
-  uploadedBy         User     @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+  uploadedById       Int?
+  uploadedBy         User?    @relation("UploadedDocuments", fields: [uploadedById], references: [id], onDelete: SetNull)
   createdAt          DateTime @default(now())
 }
 
