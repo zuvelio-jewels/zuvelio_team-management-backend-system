@@ -322,7 +322,7 @@ export class AttendanceService {
       const year = date.getUTCFullYear();
       const month = String(date.getUTCMonth() + 1).padStart(2, '0');
       const day = String(date.getUTCDate()).padStart(2, '0');
-      
+
       // Return as ISO-like string without Z for local time interpretation
       // This ensures frontend gets "2026-04-01T09:55:00" format
       return `${year}-${month}-${day}T${timeString}:00`;
