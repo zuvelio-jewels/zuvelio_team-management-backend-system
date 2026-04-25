@@ -240,6 +240,7 @@ export class TasksService {
     for (const task of tasksWithAlerts) {
       if (task.personStatus !== 'DONE' || task.qcCheck !== 'DONE') {
         const uid = task.assignedToId;
+        if (uid === null || !task.assignedTo) continue;
         if (!pendingByPerson[uid]) {
           pendingByPerson[uid] = {
             name: task.assignedTo.name,

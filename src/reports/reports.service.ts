@@ -117,6 +117,7 @@ export class ReportsService {
     const byUser = new Map<number, { name: string; tasks: typeof tasks }>();
     for (const task of tasks) {
       const uid = task.assignedToId;
+      if (uid === null || !task.assignedTo) continue;
       if (!byUser.has(uid)) {
         byUser.set(uid, { name: task.assignedTo.name, tasks: [] });
       }
