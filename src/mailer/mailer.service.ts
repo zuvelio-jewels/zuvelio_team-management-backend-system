@@ -4,56 +4,59 @@ import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailerService {
-    private transporter: nodemailer.Transporter;
-    private logger = new Logger(MailerService.name);
+  private transporter: nodemailer.Transporter;
+  private logger = new Logger(MailerService.name);
 
-    constructor(private configService: ConfigService) {
-        const mailConfig = {
-            host: this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com'),
-            port: this.configService.get<number>('SMTP_PORT', 587),
-            secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
-            auth: {
-                user: this.configService.get<string>('SMTP_USER'),
-                pass: this.configService.get<string>('SMTP_PASSWORD'),
-            },
-        };
+  constructor(private configService: ConfigService) {
+    const mailConfig = {
+      host: this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com'),
+      port: this.configService.get<number>('SMTP_PORT', 587),
+      secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
+      auth: {
+        user: this.configService.get<string>('SMTP_USER'),
+        pass: this.configService.get<string>('SMTP_PASSWORD'),
+      },
+    };
 
-        this.transporter = nodemailer.createTransport(mailConfig);
+    this.transporter = nodemailer.createTransport(mailConfig);
+  }
+
+  async sendPasswordResetEmail(
+    email: string,
+    name: string,
+    resetToken: string,
+  ): Promise<void> {
+    try {
+      const frontendUrl = this.configService.get<string>(
+        'FRONTEND_URL',
+        'http://localhost:80',
+      );
+      const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+      const htmlContent = this.getPasswordResetTemplate(name, resetLink);
+
+      await this.transporter.sendMail({
+        from: this.configService.get<string>(
+          'SMTP_FROM_EMAIL',
+          'noreply@zuvelio.com',
+        ),
+        to: email,
+        subject: 'Reset Your Password - Zuvelio',
+        html: htmlContent,
+      });
+
+      this.logger.log(`Password reset email sent to ${email}`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to send password reset email to ${email}:`,
+        error,
+      );
+      throw error;
     }
+  }
 
-    async sendPasswordResetEmail(
-        email: string,
-        name: string,
-        resetToken: string,
-    ): Promise<void> {
-        try {
-            const frontendUrl = this.configService.get<string>(
-                'FRONTEND_URL',
-                'http://localhost:80',
-            );
-            const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
-
-            const htmlContent = this.getPasswordResetTemplate(name, resetLink);
-
-            await this.transporter.sendMail({
-                from: this.configService.get<string>(
-                    'SMTP_FROM_EMAIL',
-                    'noreply@zuvelio.com',
-                ),
-                to: email,
-                subject: 'Reset Your Password - Zuvelio',
-                html: htmlContent,
-            });
-
-            this.logger.log(`Password reset email sent to ${email}`);
-        } catch (error) {
-            this.logger.error(`Failed to send password reset email to ${email}:`, error);
-            throw error;
-        }
-    }
-
-    private getPasswordResetTemplate(name: string, resetLink: string): string {
-        return `
+  private getPasswordResetTemplate(name: string, resetLink: string): string {
+    return `
       <!DOCTYPE html>
       <html>
         <head>
@@ -88,5 +91,5 @@ export class MailerService {
         </body>
       </html>
     `;
-    }
+  }
 }

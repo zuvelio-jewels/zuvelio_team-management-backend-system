@@ -4,6 +4,6 @@ import { LeavesController } from './leaves.controller';
 
 @Module({
   providers: [LeavesService],
-  controllers: [LeavesController]
+  controllers: [LeavesController],
 })
 export class LeavesModule {}

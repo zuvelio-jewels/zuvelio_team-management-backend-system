@@ -18,8 +18,8 @@ import { ReportsModule } from './reports/reports.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
-        path.resolve(__dirname, '../../.env'),   // dist/src -> project root
-        path.resolve(process.cwd(), '.env'),      // fallback: CWD
+        path.resolve(__dirname, '../../.env'), // dist/src -> project root
+        path.resolve(process.cwd(), '.env'), // fallback: CWD
       ],
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
@@ -35,4 +35,4 @@ import { ReportsModule } from './reports/reports.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

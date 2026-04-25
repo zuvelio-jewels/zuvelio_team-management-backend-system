@@ -8,4 +8,4 @@ import { TaskDocumentsController } from './task-documents.controller';
   providers: [TasksService, TaskDocumentsService],
   controllers: [TasksController, TaskDocumentsController],
 })
-export class TasksModule { }
+export class TasksModule {}

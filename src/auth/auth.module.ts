@@ -19,7 +19,7 @@ import { MailerModule } from '../mailer/mailer.module';
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: configService.get('JWT_ACCESS_EXPIRY', '15m') as any,
+          expiresIn: configService.get('JWT_ACCESS_EXPIRY', '15m'),
         },
       }),
     }),
@@ -34,4 +34,4 @@ import { MailerModule } from '../mailer/mailer.module';
   controllers: [AuthController],
   exports: [AuthService],
 })
-export class AuthModule { }
+export class AuthModule {}

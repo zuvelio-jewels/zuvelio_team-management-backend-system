@@ -9,7 +9,12 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto, LoginDto, ResetPasswordDto, ChangePasswordDto } from './dto';
+import {
+  RegisterDto,
+  LoginDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+} from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { MailerService } from '../mailer/mailer.service';
 
@@ -25,7 +30,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailerService: MailerService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
@@ -43,11 +48,23 @@ export class AuthService {
         name: dto.name.trim(),
         email: dto.email.toLowerCase().trim(),
         password: hashedPassword,
+        isActive: false,
+        isApproved: false,
       },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
     });
 
-    return { message: 'User registered successfully', user };
+    return {
+      message:
+        'Registration successful! Your account is pending admin approval. You will be able to login once approved.',
+      user,
+    };
   }
 
   async login(dto: LoginDto) {
@@ -59,8 +76,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (!user.isApproved) {
+      throw new UnauthorizedException(
+        'Your account is pending admin approval. Please wait for an admin to approve your account.',
+      );
+    }
+
     if (!user.isActive) {
-      throw new UnauthorizedException('Account is deactivated');
+      throw new UnauthorizedException(
+        'Account is deactivated. Please contact your administrator.',
+      );
     }
 
     // Check account lockout
@@ -77,7 +102,9 @@ export class AuthService {
 
     if (!isPasswordValid) {
       const failedAttempts = user.failedLoginAttempts + 1;
-      const updateData: Record<string, any> = { failedLoginAttempts: failedAttempts };
+      const updateData: Record<string, any> = {
+        failedLoginAttempts: failedAttempts,
+      };
 
       if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
         updateData.lockedUntil = new Date(
@@ -103,7 +130,10 @@ export class AuthService {
     const tokens = await this.generateTokens(user.id, user.email, user.role);
 
     // Store hashed refresh token
-    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, SALT_ROUNDS);
+    const hashedRefreshToken = await bcrypt.hash(
+      tokens.refreshToken,
+      SALT_ROUNDS,
+    );
     await this.prisma.user.update({
       where: { id: user.id },
       data: { refreshToken: hashedRefreshToken },
@@ -135,11 +165,14 @@ export class AuthService {
       where: { id: payload.sub },
     });
 
-    if (!user || !user.isActive || !user.refreshToken) {
+    if (!user || !user.isActive || !user.isApproved || !user.refreshToken) {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+    const isRefreshTokenValid = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken,
+    );
     if (!isRefreshTokenValid) {
       // Potential token reuse detected — revoke all tokens
       await this.prisma.user.update({
@@ -151,7 +184,10 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user.id, user.email, user.role);
 
-    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, SALT_ROUNDS);
+    const hashedRefreshToken = await bcrypt.hash(
+      tokens.refreshToken,
+      SALT_ROUNDS,
+    );
     await this.prisma.user.update({
       where: { id: user.id },
       data: { refreshToken: hashedRefreshToken },
@@ -167,7 +203,9 @@ export class AuthService {
 
     // Always return success to prevent email enumeration
     if (!user || !user.isActive) {
-      return { message: 'If the email exists, a password reset link has been sent' };
+      return {
+        message: 'If the email exists, a password reset link has been sent',
+      };
     }
 
     const resetToken = randomUUID();
@@ -213,7 +251,10 @@ export class AuthService {
     let matchedUserId: number | null = null;
     for (const user of users) {
       if (user.passwordResetToken) {
-        const isMatch = await bcrypt.compare(dto.token, user.passwordResetToken);
+        const isMatch = await bcrypt.compare(
+          dto.token,
+          user.passwordResetToken,
+        );
         if (isMatch) {
           matchedUserId = user.id;
           break;
@@ -251,7 +292,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password,
+    );
     if (!isCurrentPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
     }
@@ -299,11 +343,11 @@ export class AuthService {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.getOrThrow<string>('JWT_SECRET'),
-        expiresIn: this.configService.get('JWT_ACCESS_EXPIRY', '15m') as any,
+        expiresIn: this.configService.get('JWT_ACCESS_EXPIRY', '15m'),
       }),
       this.jwtService.signAsync(payload, {
         secret: this.configService.getOrThrow<string>('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.get('JWT_REFRESH_EXPIRY', '7d') as any,
+        expiresIn: this.configService.get('JWT_REFRESH_EXPIRY', '7d'),
       }),
     ]);
 
