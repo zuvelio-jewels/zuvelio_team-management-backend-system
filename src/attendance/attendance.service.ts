@@ -20,7 +20,7 @@ export class AttendanceService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async getAll(userId: number) {
     const currentUser = await this.prisma.user.findUnique({
@@ -40,6 +40,13 @@ export class AttendanceService {
           this.normalizeName(currentUser.name),
       )
       .map((record, index) => this.mapExternalRecord(record, index + 1));
+  }
+
+  async getAllRecords() {
+    const records = await this.fetchExternalAttendance();
+    return records.map((record, index) =>
+      this.mapExternalRecord(record, index + 1),
+    );
   }
 
   async checkIn(userId: number) {
@@ -167,7 +174,7 @@ export class AttendanceService {
     );
     const today = new Date();
     const fromDate = new Date(today);
-    fromDate.setDate(today.getDate() - 3);
+    fromDate.setDate(today.getDate() - 90); // Fetch 90 days of data
 
     const url = `${baseUrl}?Empcode=ALL&FromDate=${this.formatExternalDate(fromDate)}&ToDate=${this.formatExternalDate(today)}`;
 

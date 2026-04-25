@@ -4,11 +4,16 @@ import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(private attendanceService: AttendanceService) {}
+  constructor(private attendanceService: AttendanceService) { }
 
   @Get()
   findAll(@Request() req: any) {
     return this.attendanceService.getAll(req.user.id);
+  }
+
+  @Get('all-records')
+  getAllRecords() {
+    return this.attendanceService.getAllRecords();
   }
 
   @Post('check-in')
