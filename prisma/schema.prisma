@@ -57,11 +57,11 @@ model Task {
   isPresent     Boolean   @default(true)
   updatedBy     DateTime?
 
-  assignedToId  Int
-  assignedTo    User      @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedToId  Int?
+  assignedTo    User?     @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
-  allottedFromId Int
-  allottedFrom   User     @relation("AllottedFrom", fields: [allottedFromId], references: [id])
+  allottedFromId Int?
+  allottedFrom   User?    @relation("AllottedFrom", fields: [allottedFromId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   documents     TaskDocument[]
   noteHistories TaskNoteHistory[]
@@ -75,8 +75,8 @@ model TaskNoteHistory {
   taskId    Int
   task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
   note      String
-  authorId  Int
-  author    User     @relation("NoteHistoryAuthor", fields: [authorId], references: [id])
+  authorId  Int?
+  author    User?    @relation("NoteHistoryAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
 }
 

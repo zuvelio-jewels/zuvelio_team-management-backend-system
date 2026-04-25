@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
 
@@ -99,15 +99,59 @@ export class UsersService {
   async rejectUser(id: number) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    // Delete the user record entirely on rejection
-    await this.prisma.user.delete({ where: { id } });
-    return { message: 'User registration rejected and removed' };
+
+    try {
+      // For pending users, first unassign any tasks if they somehow have any
+      await this.prisma.task.updateMany({
+        where: {
+          OR: [{ assignedToId: id }, { allottedFromId: id }],
+        },
+        data: {
+          assignedToId: null,
+          allottedFromId: null,
+        },
+      });
+
+      // Delete the user record entirely on rejection
+      await this.prisma.user.delete({ where: { id } });
+      return { message: 'User registration rejected and removed' };
+    } catch (error) {
+      if (error.code === '23503' || error.code === '23001') {
+        throw new BadRequestException(
+          'Cannot reject user: User has dependencies. Please delete assigned tasks first.',
+        );
+      }
+      throw error;
+    }
   }
 
   async removeUser(id: number) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
-    await this.prisma.user.delete({ where: { id } });
-    return { message: 'User deleted successfully' };
+
+    try {
+      // Unassign all tasks from this user (set to NULL instead of deleting them)
+      // This ensures data integrity while allowing user deletion
+      await this.prisma.task.updateMany({
+        where: {
+          OR: [{ assignedToId: id }, { allottedFromId: id }],
+        },
+        data: {
+          assignedToId: null,
+          allottedFromId: null,
+        },
+      });
+
+      // Now delete the user safely
+      await this.prisma.user.delete({ where: { id } });
+      return { message: 'User deleted successfully. Associated tasks have been unassigned.' };
+    } catch (error) {
+      if (error.code === '23503' || error.code === '23001') {
+        throw new BadRequestException(
+          'Cannot delete user: User has dependencies in the system. Please contact support.',
+        );
+      }
+      throw error;
+    }
   }
 }
