@@ -317,15 +317,15 @@ export class AttendanceService {
     }
 
     try {
+      // Extract date parts from ISO string (handles UTC date correctly)
       const date = new Date(dateIso);
-      const [hours, minutes] = timeString.split(':').map(Number);
-
-      if (isNaN(hours) || isNaN(minutes)) {
-        return null;
-      }
-
-      date.setHours(hours, minutes, 0, 0);
-      return date.toISOString();
+      const year = date.getUTCFullYear();
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      
+      // Return as ISO-like string without Z for local time interpretation
+      // This ensures frontend gets "2026-04-01T09:55:00" format
+      return `${year}-${month}-${day}T${timeString}:00`;
     } catch (e) {
       return null;
     }
