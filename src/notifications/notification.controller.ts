@@ -14,7 +14,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationController {
-  constructor(private notificationService: NotificationService) { }
+  constructor(private notificationService: NotificationService) {}
 
   // Get employee notifications
   @Get()

@@ -16,7 +16,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @Controller('time-tracking')
 @UseGuards(JwtAuthGuard)
 export class TimeTrackingController {
-  constructor(private timeTrackingService: TimeTrackingService) { }
+  constructor(private timeTrackingService: TimeTrackingService) {}
 
   // Start timer for a projection
   @Post('start')
