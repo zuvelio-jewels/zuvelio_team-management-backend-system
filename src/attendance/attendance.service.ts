@@ -20,7 +20,7 @@ export class AttendanceService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-  ) { }
+  ) {}
 
   async getAll(userId: number) {
     const currentUser = await this.prisma.user.findUnique({
@@ -157,8 +157,12 @@ export class AttendanceService {
         empcode: record ? this.normalizeEmpcode(record.Empcode) : null,
         sourceStatus: record?.Status ?? null,
         date: dateIso,
-        checkIn: normalized ? this.combineDateTime(dateIso, normalized.checkIn) : null,
-        checkOut: normalized ? this.combineDateTime(dateIso, normalized.checkOut) : null,
+        checkIn: normalized
+          ? this.combineDateTime(dateIso, normalized.checkIn)
+          : null,
+        checkOut: normalized
+          ? this.combineDateTime(dateIso, normalized.checkOut)
+          : null,
       };
     });
   }
@@ -227,8 +231,14 @@ export class AttendanceService {
     const dateString = this.toIsoDateTime(record.DateString);
 
     // Combine date with time to create full ISO datetime strings
-    const checkInDateTime = this.combineDateTime(dateString, normalized.checkIn);
-    const checkOutDateTime = this.combineDateTime(dateString, normalized.checkOut);
+    const checkInDateTime = this.combineDateTime(
+      dateString,
+      normalized.checkIn,
+    );
+    const checkOutDateTime = this.combineDateTime(
+      dateString,
+      normalized.checkOut,
+    );
 
     return {
       id,
@@ -310,7 +320,10 @@ export class AttendanceService {
     return new Date(year, month - 1, day).toISOString();
   }
 
-  private combineDateTime(dateIso: string | null, timeString: string): string | null {
+  private combineDateTime(
+    dateIso: string | null,
+    timeString: string,
+  ): string | null {
     if (!dateIso) return null;
     if (timeString === 'WO' || timeString === 'A' || timeString === '00:00') {
       return null;

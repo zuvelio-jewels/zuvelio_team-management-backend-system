@@ -12,6 +12,9 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { ActivityModule } from './activity/activity.module';
 import { ReportsModule } from './reports/reports.module';
+import { ProjectionModule } from './projections/projection.module';
+import { TimeTrackingModule } from './time-tracking/time-tracking.module';
+import { NotificationModule } from './notifications/notification.module';
 
 @Module({
   imports: [
@@ -31,6 +34,9 @@ import { ReportsModule } from './reports/reports.module';
     LeavesModule,
     ActivityModule,
     ReportsModule,
+    ProjectionModule,
+    TimeTrackingModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,10 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -129,7 +133,11 @@ export class UsersService {
       await this.prisma.user.delete({ where: { id } });
       return { message: 'User registration rejected and removed' };
     } catch (error) {
-      if (error instanceof Object && 'code' in error && (error.code === '23503' || error.code === '23001')) {
+      if (
+        error instanceof Object &&
+        'code' in error &&
+        (error.code === '23503' || error.code === '23001')
+      ) {
         throw new BadRequestException(
           'Cannot reject user: User has dependencies. Please delete assigned tasks first.',
         );
@@ -163,9 +171,16 @@ export class UsersService {
 
       // Now delete the user safely
       await this.prisma.user.delete({ where: { id } });
-      return { message: 'User deleted successfully. Associated tasks have been unassigned.' };
+      return {
+        message:
+          'User deleted successfully. Associated tasks have been unassigned.',
+      };
     } catch (error) {
-      if (error instanceof Object && 'code' in error && (error.code === '23503' || error.code === '23001')) {
+      if (
+        error instanceof Object &&
+        'code' in error &&
+        (error.code === '23503' || error.code === '23001')
+      ) {
         throw new BadRequestException(
           'Cannot delete user: User has dependencies in the system. Please contact support.',
         );

@@ -40,6 +40,13 @@ model User {
   activitySummaries   ActivitySummary[]
   monitoringConfig    MonitoringConfig?
   deviceTokens        DeviceToken[]
+
+  // Projection Management - Employees with assigned projections
+  projectionsAssigned Projection[] @relation("ProjectionsAssigned")
+  projectionsCreated  Projection[] @relation("ProjectionsCreated")
+  timeLogs            TimeLog[] @relation("TimeLogs")
+  notificationsReceived Notification[] @relation("NotificationsReceived")
+  projectionActions   ProjectionAction[] @relation("ProjectionActions")
 }
 
 model Task {
@@ -218,4 +225,136 @@ model DeviceToken {
 
   @@index([userId])
   @@index([token])
+}
+
+// ========== PROJECTION MANAGEMENT SYSTEM ==========
+
+model Projection {
+  id                Int       @id @default(autoincrement())
+  
+  // Assignment Details
+  employeeId        Int
+  employee          User      @relation("ProjectionsAssigned", fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  createdByAdminId  Int
+  createdByAdmin    User      @relation("ProjectionsCreated", fields: [createdByAdminId], references: [id], onDelete: Restrict)
+  
+  // Task Description
+  title             String
+  description       String?
+  requiredSkills    String[]  @default([])  // Stored as JSON array
+  
+  // Time Allocation
+  allocatedMinutes  Int       // Admin-assigned time budget
+  assignedAt        DateTime  @default(now())
+  deadline          DateTime?
+  
+  // Status Tracking
+  status            String    @default("PENDING")  // PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED
+  employeeAcceptedAt DateTime?
+  employeeRejectedAt DateTime?
+  completedAt       DateTime?
+  rejectionReason   String?
+  
+  // Relationships
+  timeLogs          TimeLog[]
+  notifications     Notification[]
+  projectionActions ProjectionAction[]
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([employeeId])
+  @@index([createdByAdminId])
+  @@index([status])
+  @@index([assignedAt])
+}
+
+model TimeLog {
+  id                Int       @id @default(autoincrement())
+  projectionId      Int
+  projection        Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  
+  employeeId        Int
+  employee          User      @relation("TimeLogs", fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Session Details
+  sessionStart      DateTime
+  sessionEnd        DateTime?
+  allocatedDuration Int       // minutes allocated for this projection
+  actualDuration    Int       @default(0)  // minutes spent (computed from start/end + breaks)
+  
+  // Breaks/Pauses
+  breaks            Break[]
+  
+  // Status tracking
+  status            String    @default("active")  // active, paused, completed
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  @@index([projectionId])
+  @@index([employeeId])
+  @@index([sessionStart])
+}
+
+model Break {
+  id        Int       @id @default(autoincrement())
+  timeLogId Int
+  timeLog   TimeLog   @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
+  
+  startTime DateTime
+  endTime   DateTime?
+  duration  Int       @default(0)  // minutes
+  
+  createdAt DateTime  @default(now())
+  
+  @@index([timeLogId])
+}
+
+model Notification {
+  id            Int       @id @default(autoincrement())
+  projectionId  Int
+  projection    Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  
+  employeeId    Int
+  employee      User      @relation("NotificationsReceived", fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Notification Details
+  type          String    @default("PROJECTION_ASSIGNED")  // PROJECTION_ASSIGNED, TIME_EXTENSION_APPROVED, TIME_EXTENSION_DENIED, etc.
+  title         String
+  message       String
+  actionUrl     String?
+  
+  // Tracking
+  isRead        Boolean   @default(false)
+  readAt        DateTime?
+  isDismissed   Boolean   @default(false)
+  dismissedAt   DateTime?
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([employeeId])
+  @@index([projectionId])
+  @@index([isRead])
+}
+
+model ProjectionAction {
+  id            Int       @id @default(autoincrement())
+  projectionId  Int
+  projection    Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  
+  employeeId    Int
+  employee      User      @relation("ProjectionActions", fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  // Action Type & Details
+  actionType    String    // ACCEPT, REJECT, REQUEST_TIME, SWITCH_PROJECTION, PAUSE, RESUME, COMPLETE
+  details       Json?     // Additional metadata (e.g., { "additionalMinutes": 30 })
+  reason        String?   // Why they took this action
+  
+  createdAt     DateTime  @default(now())
+  
+  @@index([projectionId])
+  @@index([employeeId])
+  @@index([actionType])
 }
