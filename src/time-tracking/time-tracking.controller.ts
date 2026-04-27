@@ -18,6 +18,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class TimeTrackingController {
   constructor(private timeTrackingService: TimeTrackingService) {}
 
+  // Get employee's currently open timer (active or paused)
+  @Get('employee/current')
+  getEmployeeCurrentTimer(@Request() req) {
+    return this.timeTrackingService.getEmployeeCurrentTimeLog(req.user.id);
+  }
+
   // Start timer for a projection
   @Post('start')
   startTimer(@Body() startDto: StartTimeLogDto, @Request() req) {

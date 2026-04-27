@@ -10,6 +10,24 @@ import { StartTimeLogDto } from './dto/start-time-log.dto';
 export class TimeTrackingService {
     constructor(private prisma: PrismaService) { }
 
+    // Get currently open time log for employee across all projections
+    async getEmployeeCurrentTimeLog(employeeId: number) {
+        return this.prisma.timeLog.findFirst({
+            where: {
+                employeeId,
+                sessionEnd: null,
+                status: { in: ['active', 'paused'] },
+            },
+            include: {
+                breaks: true,
+                projection: {
+                    select: { id: true, title: true, allocatedMinutes: true, status: true },
+                },
+            },
+            orderBy: { sessionStart: 'desc' },
+        });
+    }
+
     // Start a new time log session
     async startTimeLog(employeeId: number, startDto: StartTimeLogDto) {
         const { projectionId } = startDto;
