@@ -27,7 +27,36 @@ export class TimeTrackingService {
       throw new BadRequestException('You are not assigned to this projection');
     }
 
-    // Check if employee already has an active time log for this projection
+    if (!['ACCEPTED', 'IN_PROGRESS'].includes(projection.status)) {
+      throw new BadRequestException(
+        'Projection must be accepted or in progress to start timer',
+      );
+    }
+
+    // Enforce single-project rule: only one active/paused session at a time.
+    const existingOpenLogForAnyProjection = await this.prisma.timeLog.findFirst(
+      {
+        where: {
+          employeeId,
+          status: { in: ['active', 'paused'] },
+          sessionEnd: null,
+        },
+        include: {
+          projection: { select: { id: true, title: true } },
+        },
+      },
+    );
+
+    if (
+      existingOpenLogForAnyProjection &&
+      existingOpenLogForAnyProjection.projectionId !== projectionId
+    ) {
+      throw new BadRequestException(
+        `You already have an active session on "${existingOpenLogForAnyProjection.projection.title}". Switch or complete it before starting another project.`,
+      );
+    }
+
+    // Check if employee already has an open time log for this projection
     const existingActiveLog = await this.prisma.timeLog.findFirst({
       where: {
         projectionId,
@@ -67,47 +96,10 @@ export class TimeTrackingService {
   }
 
   // Stop a time log session
-  async stopTimeLog(employeeId: number, timeLogId: number) {
-    const timeLog = await this.prisma.timeLog.findUnique({
-      where: { id: timeLogId },
-      include: { breaks: true },
-    });
-
-    if (!timeLog) {
-      throw new NotFoundException('Time log not found');
-    }
-
-    if (timeLog.employeeId !== employeeId) {
-      throw new BadRequestException('This time log is not yours');
-    }
-
-    if (timeLog.sessionEnd) {
-      throw new BadRequestException('Time log is already stopped');
-    }
-
-    // Calculate actual duration (session time - breaks)
-    const sessionDuration =
-      (new Date().getTime() - new Date(timeLog.sessionStart).getTime()) / 60000; // minutes
-    const breaksDuration = timeLog.breaks.reduce(
-      (sum, b) => sum + (b.duration || 0),
-      0,
+  async stopTimeLog(_employeeId: number, _timeLogId: number) {
+    throw new BadRequestException(
+      'Manual timer stop is disabled. Complete or switch projection instead.',
     );
-    const actualDuration = Math.max(0, sessionDuration - breaksDuration);
-
-    const updated = await this.prisma.timeLog.update({
-      where: { id: timeLogId },
-      data: {
-        sessionEnd: new Date(),
-        actualDuration: Math.round(actualDuration),
-        status: 'completed',
-      },
-      include: {
-        projection: { select: { id: true, title: true } },
-        breaks: true,
-      },
-    });
-
-    return updated;
   }
 
   // Pause a time log (start a break)

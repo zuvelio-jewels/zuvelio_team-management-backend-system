@@ -15,7 +15,7 @@ export class ProjectionService {
   constructor(
     private prisma: PrismaService,
     private notificationService: NotificationService,
-  ) { }
+  ) {}
 
   // Create a new projection (Admin only)
   async create(createProjectionDto: CreateProjectionDto, adminId: number) {
@@ -201,6 +201,16 @@ export class ProjectionService {
     });
   }
 
+  async getEmployeePendingProjections(employeeId: number) {
+    return this.prisma.projection.findMany({
+      where: {
+        employeeId,
+        status: 'PENDING',
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
+  }
+
   // Handle employee action (accept, reject, request time, switch, etc.)
   async handleEmployeeAction(
     projectionId: number,
@@ -216,12 +226,29 @@ export class ProjectionService {
 
     let updatedProjection;
     const { actionType, reason, additionalMinutes } = actionDto;
+    let actionDetails: any = undefined;
 
     switch (actionType) {
       case 'ACCEPT':
         if (projection.status !== 'PENDING') {
           throw new BadRequestException('Can only accept pending projections');
         }
+
+        const otherActiveProjection = await this.prisma.projection.findFirst({
+          where: {
+            employeeId,
+            id: { not: projectionId },
+            status: { in: ['ACCEPTED', 'IN_PROGRESS'] },
+          },
+          select: { id: true, title: true, status: true },
+        });
+
+        if (otherActiveProjection) {
+          throw new BadRequestException(
+            `You already have an active project: "${otherActiveProjection.title}". Switch or complete it before accepting another project.`,
+          );
+        }
+
         updatedProjection = await this.prisma.projection.update({
           where: { id: projectionId },
           data: {
@@ -283,7 +310,112 @@ export class ProjectionService {
           'Time extension requested',
           `${projection.employee.name} requested ${additionalMinutes} additional minutes for "${projection.title}"`,
         );
+        actionDetails = { additionalMinutes };
         break;
+
+      case 'SWITCH_PROJECTION': {
+        const switchToProjectionId = actionDto.switchToProjectionId;
+
+        if (!switchToProjectionId) {
+          throw new BadRequestException('switchToProjectionId is required');
+        }
+
+        if (switchToProjectionId === projectionId) {
+          throw new BadRequestException('Cannot switch to the same projection');
+        }
+
+        const targetProjection = await this.prisma.projection.findUnique({
+          where: { id: switchToProjectionId },
+          include: {
+            employee: { select: { id: true, name: true, email: true } },
+          },
+        });
+
+        if (!targetProjection) {
+          throw new NotFoundException('Target projection not found');
+        }
+
+        if (targetProjection.employeeId !== employeeId) {
+          throw new ForbiddenException(
+            'You can only switch to your assigned projections',
+          );
+        }
+
+        if (['COMPLETED', 'REJECTED'].includes(targetProjection.status)) {
+          throw new BadRequestException(
+            'Cannot switch to completed or rejected projections',
+          );
+        }
+
+        const closedLog = await this.finalizeOpenTimeLogForProjection(
+          projectionId,
+          employeeId,
+        );
+
+        if (projection.status === 'IN_PROGRESS') {
+          await this.prisma.projection.update({
+            where: { id: projectionId },
+            data: { status: 'ACCEPTED' },
+          });
+        }
+
+        const targetStatusData: any = {
+          status: 'IN_PROGRESS',
+        };
+
+        if (targetProjection.status === 'PENDING') {
+          targetStatusData.employeeAcceptedAt = new Date();
+        }
+
+        const switchedProjection = await this.prisma.projection.update({
+          where: { id: switchToProjectionId },
+          data: targetStatusData,
+          include: {
+            employee: { select: { id: true, name: true, email: true } },
+            createdByAdmin: { select: { id: true, name: true } },
+          },
+        });
+
+        const newTimeLog = await this.prisma.timeLog.create({
+          data: {
+            projectionId: switchToProjectionId,
+            employeeId,
+            sessionStart: new Date(),
+            allocatedDuration: switchedProjection.allocatedMinutes,
+            status: 'active',
+          },
+        });
+
+        await this.notificationService.createNotification(
+          projectionId,
+          projection.createdByAdminId,
+          'PROJECTION_SWITCHED',
+          'Projection switched',
+          `${projection.employee.name} switched from "${projection.title}" to "${switchedProjection.title}".`,
+        );
+
+        if (
+          switchedProjection.createdByAdminId !== projection.createdByAdminId
+        ) {
+          await this.notificationService.createNotification(
+            switchedProjection.id,
+            switchedProjection.createdByAdminId,
+            'PROJECTION_SWITCHED',
+            'Projection switched',
+            `${projection.employee.name} switched to "${switchedProjection.title}" and started work.`,
+          );
+        }
+
+        actionDetails = {
+          switchToProjectionId,
+          switchedFromProjectionId: projectionId,
+          closedTimeLogId: closedLog?.id,
+          newTimeLogId: newTimeLog.id,
+        };
+
+        updatedProjection = switchedProjection;
+        break;
+      }
 
       case 'COMPLETE':
         if (!['IN_PROGRESS', 'ACCEPTED'].includes(projection.status)) {
@@ -291,6 +423,28 @@ export class ProjectionService {
             'Can only complete in-progress or accepted projections',
           );
         }
+
+        const finalizedLog = await this.finalizeOpenTimeLogForProjection(
+          projectionId,
+          employeeId,
+        );
+
+        const totals = await this.prisma.timeLog.aggregate({
+          where: {
+            projectionId,
+            employeeId,
+          },
+          _sum: {
+            actualDuration: true,
+          },
+          _count: {
+            id: true,
+          },
+        });
+
+        const totalActualMinutes = totals._sum.actualDuration || 0;
+        const varianceMinutes =
+          totalActualMinutes - projection.allocatedMinutes;
 
         updatedProjection = await this.prisma.projection.update({
           where: { id: projectionId },
@@ -306,8 +460,16 @@ export class ProjectionService {
           projection.createdByAdminId,
           'PROJECTION_COMPLETED',
           'Task completed',
-          `${projection.employee.name} completed the task: "${projection.title}"`,
+          `${projection.employee.name} completed "${projection.title}". Allocated: ${projection.allocatedMinutes} min, Actual: ${totalActualMinutes} min, Variance: ${varianceMinutes} min, Sessions: ${totals._count.id}.`,
         );
+
+        actionDetails = {
+          finalizedTimeLogId: finalizedLog?.id,
+          allocatedMinutes: projection.allocatedMinutes,
+          totalActualMinutes,
+          varianceMinutes,
+          sessionsCount: totals._count.id,
+        };
         break;
 
       default:
@@ -321,11 +483,80 @@ export class ProjectionService {
         employeeId,
         actionType,
         reason,
-        details: additionalMinutes ? { additionalMinutes } : undefined,
+        details: actionDetails,
       },
     });
 
     return updatedProjection;
+  }
+
+  private async finalizeOpenTimeLogForProjection(
+    projectionId: number,
+    employeeId: number,
+  ) {
+    const openLog = await this.prisma.timeLog.findFirst({
+      where: {
+        projectionId,
+        employeeId,
+        sessionEnd: null,
+      },
+      include: {
+        breaks: true,
+      },
+      orderBy: {
+        sessionStart: 'desc',
+      },
+    });
+
+    if (!openLog) {
+      return null;
+    }
+
+    const now = new Date();
+
+    for (const br of openLog.breaks) {
+      if (!br.endTime) {
+        const breakDurationMinutes = Math.max(
+          0,
+          Math.round(
+            (now.getTime() - new Date(br.startTime).getTime()) / 60000,
+          ),
+        );
+
+        await this.prisma.break.update({
+          where: { id: br.id },
+          data: {
+            endTime: now,
+            duration: breakDurationMinutes,
+          },
+        });
+      }
+    }
+
+    const refreshedBreaks = await this.prisma.break.findMany({
+      where: { timeLogId: openLog.id },
+    });
+
+    const sessionDurationMinutes =
+      (now.getTime() - new Date(openLog.sessionStart).getTime()) / 60000;
+    const breaksDurationMinutes = refreshedBreaks.reduce(
+      (sum, br) => sum + (br.duration || 0),
+      0,
+    );
+
+    const actualDuration = Math.max(
+      0,
+      Math.round(sessionDurationMinutes - breaksDurationMinutes),
+    );
+
+    return this.prisma.timeLog.update({
+      where: { id: openLog.id },
+      data: {
+        sessionEnd: now,
+        status: 'completed',
+        actualDuration,
+      },
+    });
   }
 
   // Get projections for admin dashboard

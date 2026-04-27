@@ -22,7 +22,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Controller('projections')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ProjectionController {
-  constructor(private projectionService: ProjectionService) { }
+  constructor(private projectionService: ProjectionService) {}
 
   // Create projection (Admin only)
   @Post()
@@ -70,6 +70,11 @@ export class ProjectionController {
       req?.user?.id,
       limit,
     );
+  }
+
+  @Get('employee/pending')
+  getEmployeePending(@Request() req) {
+    return this.projectionService.getEmployeePendingProjections(req.user.id);
   }
 
   // Get single projection
