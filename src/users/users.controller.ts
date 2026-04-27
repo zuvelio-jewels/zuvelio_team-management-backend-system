@@ -20,7 +20,7 @@ import { ApproveUserDto } from './dto';
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(private usersService: UsersService) { }
 
   @Get()
   findAll() {
@@ -30,6 +30,11 @@ export class UsersController {
   @Get('assignable')
   findAssignable() {
     return this.usersService.findAssignable();
+  }
+
+  @Get('project-assignable')
+  findProjectAssignable() {
+    return this.usersService.findProjectAssignable();
   }
 
   @Get('pending')
@@ -52,6 +57,16 @@ export class UsersController {
     @Body('isAssignable') isAssignable: boolean,
   ) {
     return this.usersService.setAssignable(id, isAssignable);
+  }
+
+  @Patch(':id/project-assignable')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  setProjectAssignable(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('isProjectAssignable') isProjectAssignable: boolean,
+  ) {
+    return this.usersService.setProjectAssignable(id, isProjectAssignable);
   }
 
   @Post(':id/approve')

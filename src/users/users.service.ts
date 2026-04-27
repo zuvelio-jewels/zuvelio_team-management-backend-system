@@ -8,7 +8,7 @@ import { Role } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -19,6 +19,7 @@ export class UsersService {
         email: true,
         role: true,
         isAssignable: true,
+        isProjectAssignable: true,
         isApproved: true,
       },
       orderBy: { name: 'asc' },
@@ -60,6 +61,20 @@ export class UsersService {
     });
   }
 
+  async findProjectAssignable() {
+    return this.prisma.user.findMany({
+      where: { isActive: true, isProjectAssignable: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isProjectAssignable: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findOne(id: number) {
     return this.prisma.user.findUnique({
       where: { id },
@@ -69,7 +84,24 @@ export class UsersService {
         email: true,
         role: true,
         isAssignable: true,
+        isProjectAssignable: true,
         isApproved: true,
+      },
+    });
+  }
+
+  async setProjectAssignable(id: number, isProjectAssignable: boolean) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id },
+      data: { isProjectAssignable },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isProjectAssignable: true,
       },
     });
   }

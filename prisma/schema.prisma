@@ -33,6 +33,9 @@ model User {
   // Task Assignment
   isAssignable        Boolean @default(false)
 
+  // Projection Assignment
+  isProjectAssignable Boolean @default(false)
+
   // Activity Monitoring
   isMonitoringEnabled Boolean @default(true)
   lastActivityAt      DateTime?
