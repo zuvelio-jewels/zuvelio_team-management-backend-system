@@ -127,12 +127,20 @@ export class UsersService {
     if (!user) throw new NotFoundException('User not found');
     return this.prisma.user.update({
       where: { id },
-      data: { isApproved: true, isActive: true, role },
+      data: {
+        isApproved: true,
+        isActive: true,
+        role,
+        isAssignable: true,
+        isProjectAssignable: true,
+      },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        isAssignable: true,
+        isProjectAssignable: true,
         isApproved: true,
         isActive: true,
       },
