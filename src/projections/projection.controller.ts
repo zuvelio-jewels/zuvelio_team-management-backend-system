@@ -77,6 +77,11 @@ export class ProjectionController {
         return this.projectionService.getEmployeePendingProjections(req.user.id);
     }
 
+    @Get('employee/incomplete')
+    getEmployeeIncomplete(@Request() req) {
+        return this.projectionService.getEmployeeIncompleteProjections(req.user.id);
+    }
+
     // Get single projection
     @Get(':id')
     findOne(@Param('id', ParseIntPipe) id: number) {

@@ -40,9 +40,6 @@ export class ProjectionService {
                 ...projectionData,
                 employeeId,
                 createdByAdminId: adminId,
-                deadline: projectionData.deadline
-                    ? new Date(projectionData.deadline)
-                    : null,
             },
             include: {
                 employee: { select: { id: true, name: true, email: true } },
@@ -137,12 +134,7 @@ export class ProjectionService {
 
         const updated = await this.prisma.projection.update({
             where: { id },
-            data: {
-                ...updateProjectionDto,
-                deadline: updateProjectionDto.deadline
-                    ? new Date(updateProjectionDto.deadline)
-                    : undefined,
-            },
+            data: updateProjectionDto,
             include: {
                 employee: { select: { id: true, name: true, email: true } },
                 createdByAdmin: { select: { id: true, name: true } },
@@ -208,6 +200,19 @@ export class ProjectionService {
                 status: 'PENDING',
             },
             orderBy: { assignedAt: 'desc' },
+        });
+    }
+
+    async getEmployeeIncompleteProjections(employeeId: number) {
+        return this.prisma.projection.findMany({
+            where: {
+                employeeId,
+                status: 'INCOMPLETE',
+            },
+            include: {
+                timeLogs: { select: { actualDuration: true } },
+            },
+            orderBy: { updatedAt: 'desc' },
         });
     }
 
@@ -315,9 +320,18 @@ export class ProjectionService {
 
             case 'SWITCH_PROJECTION': {
                 const switchToProjectionId = actionDto.switchToProjectionId;
+                const switchReason = reason?.trim();
 
                 if (!switchToProjectionId) {
                     throw new BadRequestException('switchToProjectionId is required');
+                }
+
+                if (!switchReason) {
+                    throw new BadRequestException('Reason is required when switching projects');
+                }
+
+                if (!['ACCEPTED', 'IN_PROGRESS'].includes(projection.status)) {
+                    throw new BadRequestException('Can only switch active or accepted projections');
                 }
 
                 if (switchToProjectionId === projectionId) {
@@ -352,12 +366,14 @@ export class ProjectionService {
                     employeeId,
                 );
 
-                if (projection.status === 'IN_PROGRESS') {
-                    await this.prisma.projection.update({
-                        where: { id: projectionId },
-                        data: { status: 'ACCEPTED' },
-                    });
-                }
+                await this.prisma.projection.update({
+                    where: { id: projectionId },
+                    data: {
+                        status: 'INCOMPLETE',
+                        rejectionReason: switchReason,
+                        completedAt: null,
+                    },
+                });
 
                 const targetStatusData: any = {
                     status: 'IN_PROGRESS',
@@ -391,7 +407,7 @@ export class ProjectionService {
                     projection.createdByAdminId,
                     'PROJECTION_SWITCHED',
                     'Projection switched',
-                    `${projection.employee.name} switched from "${projection.title}" to "${switchedProjection.title}".`,
+                    `${projection.employee.name} marked "${projection.title}" as incomplete and switched to "${switchedProjection.title}". Reason: ${switchReason}`,
                 );
 
                 if (
@@ -402,13 +418,15 @@ export class ProjectionService {
                         switchedProjection.createdByAdminId,
                         'PROJECTION_SWITCHED',
                         'Projection switched',
-                        `${projection.employee.name} switched to "${switchedProjection.title}" and started work.`,
+                        `${projection.employee.name} switched to "${switchedProjection.title}" and started work. Previous task marked incomplete. Reason: ${switchReason}`,
                     );
                 }
 
                 actionDetails = {
                     switchToProjectionId,
                     switchedFromProjectionId: projectionId,
+                    switchedFromStatus: 'INCOMPLETE',
+                    switchReason,
                     closedTimeLogId: closedLog?.id,
                     newTimeLogId: newTimeLog.id,
                 };
@@ -584,6 +602,9 @@ export class ProjectionService {
         const pendingProjections = projections.filter(
             (p) => p.status === 'PENDING',
         ).length;
+        const incompleteProjections = projections.filter(
+            (p) => p.status === 'INCOMPLETE',
+        ).length;
 
         const totalAllocatedTime = projections.reduce(
             (sum, p) => sum + p.allocatedMinutes,
@@ -603,6 +624,7 @@ export class ProjectionService {
                 completedProjections,
                 inProgressProjections,
                 pendingProjections,
+                incompleteProjections,
                 totalAllocatedTime,
                 totalActualTime,
                 averageTimeEfficiency:

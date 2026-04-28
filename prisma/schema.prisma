@@ -245,15 +245,13 @@ model Projection {
   // Task Description
   title             String
   description       String?
-  requiredSkills    String[]  @default([])  // Stored as JSON array
   
   // Time Allocation
   allocatedMinutes  Int       // Admin-assigned time budget
   assignedAt        DateTime  @default(now())
-  deadline          DateTime?
   
   // Status Tracking
-  status            String    @default("PENDING")  // PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED
+  status            String    @default("PENDING")  // PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, REJECTED, INCOMPLETE
   employeeAcceptedAt DateTime?
   employeeRejectedAt DateTime?
   completedAt       DateTime?

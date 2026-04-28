@@ -3,8 +3,6 @@ import {
   IsInt,
   IsOptional,
   Min,
-  IsDateString,
-  IsArray,
   IsIn,
 } from 'class-validator';
 
@@ -17,21 +15,13 @@ export class UpdateProjectionDto {
   @IsOptional()
   description?: string;
 
-  @IsArray()
-  @IsOptional()
-  requiredSkills?: string[];
-
   @IsInt()
   @IsOptional()
   @Min(1)
   allocatedMinutes?: number;
 
-  @IsDateString()
-  @IsOptional()
-  deadline?: string;
-
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED'])
+  @IsIn(['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED', 'INCOMPLETE'])
   status?: string;
 }
