@@ -248,10 +248,19 @@ export class ProjectionService {
                     select: { id: true, title: true, status: true },
                 });
 
+                // Auto-switch: if there's an active project, mark it INCOMPLETE first
                 if (otherActiveProjection) {
-                    throw new BadRequestException(
-                        `You already have an active project: "${otherActiveProjection.title}". Switch or complete it before accepting another project.`,
+                    await this.finalizeOpenTimeLogForProjection(
+                        otherActiveProjection.id,
+                        employeeId,
                     );
+                    await this.prisma.projection.update({
+                        where: { id: otherActiveProjection.id },
+                        data: {
+                            status: 'INCOMPLETE',
+                            rejectionReason: `Auto-switched when "${projection.title}" was accepted`,
+                        },
+                    });
                 }
 
                 updatedProjection = await this.prisma.projection.update({
