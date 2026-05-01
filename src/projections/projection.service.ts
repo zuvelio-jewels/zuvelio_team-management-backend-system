@@ -17,7 +17,7 @@ export class ProjectionService {
         private notificationService: NotificationService,
     ) { }
 
-    // Create a new projection (Admin only)
+    // Create a new design projection (Admin only)
     async create(createProjectionDto: CreateProjectionDto, adminId: number) {
         const { employeeId, ...projectionData } = createProjectionDto;
 
