@@ -499,6 +499,123 @@ export class ProjectionService {
                 };
                 break;
 
+            case 'RESUME_INCOMPLETE': {
+                if (projection.status !== 'INCOMPLETE') {
+                    throw new BadRequestException(
+                        'Can only resume projections marked as incomplete',
+                    );
+                }
+
+                // If another projection has an open session, close it before resuming.
+                const otherOpenLog = await this.prisma.timeLog.findFirst({
+                    where: {
+                        employeeId,
+                        projectionId: { not: projectionId },
+                        sessionEnd: null,
+                        status: { in: ['active', 'paused'] },
+                    },
+                    select: { projectionId: true },
+                });
+
+                if (otherOpenLog) {
+                    await this.finalizeOpenTimeLogForProjection(
+                        otherOpenLog.projectionId,
+                        employeeId,
+                    );
+
+                    await this.prisma.projection.update({
+                        where: { id: otherOpenLog.projectionId },
+                        data: {
+                            status: 'INCOMPLETE',
+                            rejectionReason:
+                                'Auto-switched while resuming another incomplete projection',
+                        },
+                    });
+                }
+
+                updatedProjection = await this.prisma.projection.update({
+                    where: { id: projectionId },
+                    data: {
+                        status: 'IN_PROGRESS',
+                        employeeAcceptedAt: projection.employeeAcceptedAt || new Date(),
+                    },
+                });
+
+                const existingOpenLog = await this.prisma.timeLog.findFirst({
+                    where: {
+                        projectionId,
+                        employeeId,
+                        sessionEnd: null,
+                        status: { in: ['active', 'paused'] },
+                    },
+                    include: {
+                        breaks: { orderBy: { startTime: 'desc' }, take: 1 },
+                    },
+                    orderBy: { sessionStart: 'desc' },
+                });
+
+                let resumedTimeLogId: number;
+
+                if (existingOpenLog) {
+                    if (existingOpenLog.status === 'paused') {
+                        const latestBreak = existingOpenLog.breaks[0];
+                        if (latestBreak && !latestBreak.endTime) {
+                            const now = new Date();
+                            const breakDurationMinutes = Math.max(
+                                0,
+                                Math.round(
+                                    (now.getTime() -
+                                        new Date(latestBreak.startTime).getTime()) /
+                                        60000,
+                                ),
+                            );
+
+                            await this.prisma.break.update({
+                                where: { id: latestBreak.id },
+                                data: {
+                                    endTime: now,
+                                    duration: breakDurationMinutes,
+                                },
+                            });
+                        }
+
+                        await this.prisma.timeLog.update({
+                            where: { id: existingOpenLog.id },
+                            data: { status: 'active' },
+                        });
+                    }
+
+                    resumedTimeLogId = existingOpenLog.id;
+                } else {
+                    const newTimeLog = await this.prisma.timeLog.create({
+                        data: {
+                            projectionId,
+                            employeeId,
+                            sessionStart: new Date(),
+                            allocatedDuration: projection.allocatedMinutes,
+                            status: 'active',
+                        },
+                    });
+
+                    resumedTimeLogId = newTimeLog.id;
+                }
+
+                actionDetails = {
+                    resumedProjectionId: projectionId,
+                    resumedFromStatus: 'INCOMPLETE',
+                    resumedTimeLogId,
+                };
+
+                await this.notificationService.createNotification(
+                    projectionId,
+                    projection.createdByAdminId,
+                    'PROJECTION_SWITCHED',
+                    'Incomplete projection resumed',
+                    `${projection.employee.name} resumed incomplete task: "${projection.title}".`,
+                );
+                break;
+            }
+
             default:
                 throw new BadRequestException(`Unknown action type: ${actionType}`);
         }
