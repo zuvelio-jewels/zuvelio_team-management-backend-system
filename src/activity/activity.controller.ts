@@ -292,6 +292,10 @@ export class ActivityController {
       join(agentRoot, 'ONE_CLICK_INSTALL.bat'),
     ]);
 
+    const employeeSetupPath = pickExisting([
+      join(agentRoot, 'EMPLOYEE_SETUP.bat'),
+    ]);
+
     const readmePath = pickExisting([join(agentRoot, 'README_USER.txt')]);
 
     const forwardedProto = req.headers['x-forwarded-proto'];
@@ -389,6 +393,25 @@ export class ActivityController {
       zip.file('ONE_CLICK_INSTALL.bat', oneClickFallback);
     }
 
+    // ── Employee self-setup: local file → env URL → generated fallback ─
+    if (employeeSetupPath) {
+      zip.file('EMPLOYEE_SETUP.bat', readFileSync(employeeSetupPath, 'utf8'));
+    } else if (process.env.AGENT_EMPLOYEE_SETUP_URL) {
+      const setupRes = await fetch(process.env.AGENT_EMPLOYEE_SETUP_URL);
+      if (setupRes.ok) {
+        zip.file('EMPLOYEE_SETUP.bat', await setupRes.text());
+      }
+    } else {
+      const employeeSetupFallback = [
+        '@echo off',
+        'cd /d "%~dp0"',
+        'echo Running one-click installer...',
+        'call "ONE_CLICK_INSTALL.bat"',
+        '',
+      ].join('\n');
+      zip.file('EMPLOYEE_SETUP.bat', employeeSetupFallback);
+    }
+
     // ── Optional readme ───────────────────────────────────────────────────
     if (readmePath) {
       zip.file('README_USER.txt', readFileSync(readmePath, 'utf8'));
@@ -403,9 +426,12 @@ export class ActivityController {
       '============================================',
       '',
       '1. Keep all files in one folder',
-      '2. Double-click ONE_CLICK_INSTALL.bat',
+      '2. Double-click EMPLOYEE_SETUP.bat (recommended)',
       '3. Click Yes on the Windows admin prompt',
       '4. Wait for installation complete message',
+      '5. If prompted, enter your Zuvelio login credentials',
+      '',
+      'Alternative: you can also run ONE_CLICK_INSTALL.bat.',
       '',
       'If zuvelio-activity-agent.exe is not included, ask your administrator for the download link.',
       '',
@@ -413,7 +439,7 @@ export class ActivityController {
     zip.file('SETUP_INSTRUCTIONS.txt', instructions);
 
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-    const fileName = `zuvelio-activity-setup-user-${userId}.zip`;
+    const fileName = `zuvelio-activity-setup-user-${userId}-${Date.now()}.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
