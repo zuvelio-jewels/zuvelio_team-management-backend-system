@@ -200,10 +200,13 @@ model MonitoringConfig {
   // Monitoring settings
   isMonitoringEnabled     Boolean   @default(true)
   
-  // Working hours (in 24-hour format)
+  // Working hours (in 24-hour format, interpreted in timezoneOffsetHours)
   startWorkHour           Int       @default(9)    // 9 AM
   endWorkHour             Int       @default(18)   // 6 PM
-  
+
+  // UTC offset in hours (e.g. +5 for PKT, +0 for UTC, -5 for EST)
+  timezoneOffsetHours     Int       @default(5)    // Default: PKT (UTC+5)
+
   // Idle threshold in minutes
   idleThresholdMinutes    Int       @default(5)
   
