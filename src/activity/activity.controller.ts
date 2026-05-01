@@ -257,6 +257,40 @@ export class ActivityController {
     return this.activityService.getAdminEmployeeList(req.user.role);
   }
 
+  /** GET /activity/admin/employees/:id — single employee profile */
+  @Get('admin/employees/:id')
+  async getEmployeeProfile(
+    @Req() req,
+    @Param('id', ParseIntPipe) targetId: number,
+  ) {
+    return this.activityService.getAdminEmployeeProfile(req.user.role, targetId);
+  }
+
+  /** GET /activity/admin/employees/:id/dashboard — today's dashboard for any employee */
+  @Get('admin/employees/:id/dashboard')
+  async getEmployeeDashboard(
+    @Req() req,
+    @Param('id', ParseIntPipe) targetId: number,
+  ) {
+    if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+      throw new ForbiddenException('Admins and managers only');
+    }
+    return this.activityService.getTodayActivityDashboard(targetId);
+  }
+
+  /** GET /activity/admin/employees/:id/summary?startDate=&endDate= */
+  @Get('admin/employees/:id/summary')
+  async getEmployeeSummary(
+    @Req() req,
+    @Param('id', ParseIntPipe) targetId: number,
+    @Query() query: GetActivitySummaryDto,
+  ) {
+    if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
+      throw new ForbiddenException('Admins and managers only');
+    }
+    return this.activityService.getAdminEmployeeSummary(targetId, query);
+  }
+
   @Patch('admin/employees/:id/monitoring')
   async toggleMonitoring(
     @Req() req,

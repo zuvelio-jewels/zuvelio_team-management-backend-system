@@ -736,6 +736,61 @@ export class ActivityService {
 
   // ─── Admin Employee Management ─────────────────────────────────────────────
 
+  /**
+   * Get a single employee's full profile (admin view)
+   */
+  async getAdminEmployeeProfile(adminRole: string, targetUserId: number) {
+    if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
+      throw new ForbiddenException('Only admins and managers can access employee profiles');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        isActive: true,
+        isMonitoringEnabled: true,
+        lastActivityAt: true,
+        createdAt: true,
+        monitoringConfig: {
+          select: {
+            isMonitoringEnabled: true,
+            startWorkHour: true,
+            endWorkHour: true,
+            idleThresholdMinutes: true,
+            timezoneOffsetHours: true,
+          },
+        },
+        deviceTokens: {
+          where: { isRevoked: false },
+          select: { id: true, deviceName: true, lastUsedAt: true, createdAt: true },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException(`User ${targetUserId} not found`);
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return { ...user, isOnline: user.lastActivityAt ? user.lastActivityAt > fiveMinutesAgo : false };
+  }
+
+  /**
+   * Get date-range activity summary for any employee (admin only)
+   */
+  async getAdminEmployeeSummary(targetUserId: number, query: GetActivitySummaryDto) {
+    const { startDate, endDate } = query;
+    return this.prisma.activitySummary.findMany({
+      where: {
+        userId: targetUserId,
+        date: {
+          gte: new Date(startDate),
+          lte: new Date(endDate),
+        },
+      },
+      orderBy: [{ date: 'asc' }, { hour: 'asc' }],
+    });
+  }
+
   async getAdminEmployeeList(adminRole: string) {
     if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
       throw new ForbiddenException(
