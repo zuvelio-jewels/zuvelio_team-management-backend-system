@@ -542,6 +542,9 @@ export class ActivityService {
         }
       }
 
+      // Cache idle thresholds per user to avoid repeated DB hits
+      const idleThresholdCache = new Map<number, number>();
+
       // Create summaries
       for (const [_, group] of groupedByUserTask) {
         const keystrokes = group.events.filter(
@@ -554,8 +557,32 @@ export class ActivityService {
           (e) => e.eventType === 'MOUSE_MOVE',
         ).length;
 
-        // TODO: Calculate idle time more accurately
-        const idleTimeMinutes = 0;
+        // Calculate idle time: sum of gaps between consecutive events that exceed the idle threshold
+        let idleThresholdMs = 5 * 60 * 1000; // default 5 min
+        if (!idleThresholdCache.has(group.userId)) {
+          const config = await this.prisma.monitoringConfig.findUnique({
+            where: { userId: group.userId },
+            select: { idleThresholdMinutes: true },
+          });
+          const thresholdMin = config?.idleThresholdMinutes ?? 5;
+          idleThresholdCache.set(group.userId, thresholdMin * 60 * 1000);
+        }
+        idleThresholdMs = idleThresholdCache.get(group.userId)!;
+
+        let idleTimeMinutes = 0;
+        if (group.events.length > 1) {
+          const sorted = group.events
+            .map((e) => new Date(e.timestamp).getTime())
+            .sort((a, b) => a - b);
+          let idleMs = 0;
+          for (let i = 1; i < sorted.length; i++) {
+            const gap = sorted[i] - sorted[i - 1];
+            if (gap >= idleThresholdMs) {
+              idleMs += gap;
+            }
+          }
+          idleTimeMinutes = Math.round(idleMs / 60000);
+        }
 
         const taskIdForUpsert = group.taskId ?? null;
 
