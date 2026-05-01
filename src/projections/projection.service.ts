@@ -566,7 +566,7 @@ export class ProjectionService {
                                 Math.round(
                                     (now.getTime() -
                                         new Date(latestBreak.startTime).getTime()) /
-                                        60000,
+                                    60000,
                                 ),
                             );
 
