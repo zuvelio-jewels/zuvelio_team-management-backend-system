@@ -45,9 +45,9 @@ export class TimeTrackingService {
             throw new BadRequestException('You are not assigned to this projection');
         }
 
-        if (!['ACCEPTED', 'IN_PROGRESS'].includes(projection.status)) {
+        if (!['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'INCOMPLETE'].includes(projection.status)) {
             throw new BadRequestException(
-                'Projection must be accepted or in progress to start timer',
+                'Projection must be pending, accepted, in progress, or incomplete to start timer',
             );
         }
 
@@ -107,7 +107,10 @@ export class TimeTrackingService {
         // Update projection status to IN_PROGRESS
         await this.prisma.projection.update({
             where: { id: projectionId },
-            data: { status: 'IN_PROGRESS' },
+            data: {
+                status: 'IN_PROGRESS',
+                employeeAcceptedAt: projection.employeeAcceptedAt || new Date(),
+            },
         });
 
         return timeLog;
