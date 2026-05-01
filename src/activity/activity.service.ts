@@ -130,19 +130,19 @@ export class ActivityService {
 
   private async canAcceptActivityEvent(userId: number): Promise<boolean> {
     const config = await this.getOrCreateMonitoringConfig(userId);
-    if (!config.isMonitoringEnabled) {
-      return false;
-    }
-
-    return this.isWithinWorkingHours(config.startWorkHour, config.endWorkHour);
+    // Accept events whenever the PC is on and monitoring is enabled.
+    // No working-hours gate — online/offline is determined by PC activity, not time.
+    return config.isMonitoringEnabled;
   }
 
   private isWithinWorkingHours(
     startWorkHour: number,
     endWorkHour: number,
+    timezoneOffsetHours = 0,
   ): boolean {
-    const currentHour = new Date().getHours();
-    return currentHour >= startWorkHour && currentHour < endWorkHour;
+    const utcHour = new Date().getUTCHours();
+    const localHour = (utcHour + timezoneOffsetHours + 24) % 24;
+    return localHour >= startWorkHour && localHour < endWorkHour;
   }
 
   /**
@@ -152,9 +152,11 @@ export class ActivityService {
   private isWithinWorkingHoursInclusive(
     startWorkHour: number,
     endWorkHour: number,
+    timezoneOffsetHours = 0,
   ): boolean {
-    const currentHour = new Date().getHours();
-    return currentHour >= startWorkHour && currentHour <= endWorkHour;
+    const utcHour = new Date().getUTCHours();
+    const localHour = (utcHour + timezoneOffsetHours + 24) % 24;
+    return localHour >= startWorkHour && localHour <= endWorkHour;
   }
 
   private async getOrCreateMonitoringConfig(userId: number) {
@@ -170,6 +172,7 @@ export class ActivityService {
           startWorkHour: 9,
           endWorkHour: 18,
           idleThresholdMinutes: 5,
+          timezoneOffsetHours: 5,
         },
       });
     }
@@ -217,21 +220,9 @@ export class ActivityService {
   async isMonitoringActive(userId: number): Promise<boolean> {
     try {
       const config = await this.getOrCreateMonitoringConfig(userId);
-
-      if (!config.isMonitoringEnabled) {
-        return false;
-      }
-
-      if (
-        !this.isWithinWorkingHoursInclusive(
-          config.startWorkHour,
-          config.endWorkHour,
-        )
-      ) {
-        return false;
-      }
-
-      return true;
+      // Monitoring is active as long as it's enabled — no time restriction.
+      // The PC being on = active; PC off = no data = shown as offline.
+      return config.isMonitoringEnabled;
     } catch (error) {
       this.logger.error(
         `Error checking monitoring status for user ${userId}:`,
