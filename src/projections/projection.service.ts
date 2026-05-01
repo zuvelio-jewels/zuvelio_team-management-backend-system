@@ -169,7 +169,7 @@ export class ProjectionService {
         return this.prisma.projection.findFirst({
             where: {
                 employeeId,
-                status: { in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS'] },
+                status: 'IN_PROGRESS',
             },
             include: {
                 timeLogs: { orderBy: { createdAt: 'desc' }, take: 1 },
@@ -197,7 +197,7 @@ export class ProjectionService {
         return this.prisma.projection.findMany({
             where: {
                 employeeId,
-                status: 'PENDING',
+                status: { in: ['PENDING', 'ACCEPTED'] },
             },
             orderBy: { assignedAt: 'desc' },
         });
