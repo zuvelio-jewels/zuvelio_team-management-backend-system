@@ -33,7 +33,7 @@ import { Public } from '../auth/decorators/public.decorator';
 @Controller('activity')
 @UseGuards(JwtAuthGuard)
 export class ActivityController {
-  constructor(private activityService: ActivityService) {}
+  constructor(private activityService: ActivityService) { }
 
   /**
    * POST /activity/log

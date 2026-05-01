@@ -668,11 +668,9 @@ export class ActivityService {
     });
 
     const payload = {
-      id: user.id,
+      sub: user.id,
       email: user.email,
-      name: user.name,
       role: user.role,
-      isActive: user.isActive,
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '8h' });
 
