@@ -35,6 +35,14 @@ import { Public } from '../auth/decorators/public.decorator';
 export class ActivityController {
   constructor(private activityService: ActivityService) { }
 
+  private getAgentRoot() {
+    return join(process.cwd(), '..', 'activity-monitor-agent');
+  }
+
+  private pickExistingPath(paths: string[]) {
+    return paths.find((path) => existsSync(path));
+  }
+
   /**
    * POST /activity/log
    * Client sends keyboard/mouse events for logging
@@ -212,6 +220,17 @@ export class ActivityController {
     @Query('deviceName') deviceName: string,
     @Res() res: Response,
   ) {
+    const prebuiltSetupPath = this.pickExistingPath([
+      join(this.getAgentRoot(), 'ZuvelioSetup.zip'),
+    ]);
+
+    if (prebuiltSetupPath) {
+      return res.download(
+        prebuiltSetupPath,
+        `zuvelio-activity-setup-user-${req.user.id}.zip`,
+      );
+    }
+
     const device = await this.activityService.registerSelfDevice(
       req.user.id,
       deviceName,
@@ -310,27 +329,26 @@ export class ActivityController {
     deviceToken: string,
     userId: number,
   ) {
-    const agentRoot = join(process.cwd(), '..', 'activity-monitor-agent');
-    const pickExisting = (paths: string[]) => paths.find((p) => existsSync(p));
+    const agentRoot = this.getAgentRoot();
 
-    const exePath = pickExisting([
+    const exePath = this.pickExistingPath([
       join(agentRoot, 'dist', 'zuvelio-activity-agent.exe'),
       join(agentRoot, 'zuvelio-activity-agent.exe'),
     ]);
 
-    const installerPath = pickExisting([
+    const installerPath = this.pickExistingPath([
       join(agentRoot, 'INSTALL_OFFICE_TRACKING.bat'),
     ]);
 
-    const oneClickPath = pickExisting([
+    const oneClickPath = this.pickExistingPath([
       join(agentRoot, 'ONE_CLICK_INSTALL.bat'),
     ]);
 
-    const employeeSetupPath = pickExisting([
+    const employeeSetupPath = this.pickExistingPath([
       join(agentRoot, 'EMPLOYEE_SETUP.bat'),
     ]);
 
-    const readmePath = pickExisting([join(agentRoot, 'README_USER.txt')]);
+    const readmePath = this.pickExistingPath([join(agentRoot, 'README_USER.txt')]);
 
     const forwardedProto = req.headers['x-forwarded-proto'];
     const protocol = Array.isArray(forwardedProto)
