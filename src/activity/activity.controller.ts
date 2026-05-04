@@ -238,6 +238,19 @@ export class ActivityController {
     return this.sendSetupPackage(res, req, device.token, req.user.id);
   }
 
+  // ─── Browser heartbeat ─────────────────────────────────────────────────────
+
+  /**
+   * POST /activity/heartbeat
+   * Angular browser app calls this every ~60 s while the user is logged in.
+   * Updates lastActivityAt so the user shows as Online on the admin dashboard
+   * regardless of whether monitoring event collection is enabled or idle.
+   */
+  @Post('heartbeat')
+  async browserHeartbeat(@Req() req) {
+    return this.activityService.recordBrowserHeartbeat(req.user.id);
+  }
+
   // ─── Agent heartbeat / offline ─────────────────────────────────────────────
 
   /**

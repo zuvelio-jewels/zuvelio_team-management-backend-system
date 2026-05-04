@@ -43,19 +43,19 @@ export class ActivityService {
     createActivityDto: CreateActivityEventDto,
   ) {
     try {
+      // Always stamp lastActivityAt first so the user's online status stays
+      // accurate even when event collection (monitoring) is disabled.
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lastActivityAt: new Date() },
+      });
+
       const canAcceptEvent = await this.canAcceptActivityEvent(userId);
       if (!canAcceptEvent) {
         return { success: false, reason: 'Monitoring not active' };
       }
 
       this.bufferActivityEvents(userId, [createActivityDto]);
-
-      // Update lastActivityAt
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { lastActivityAt: new Date() },
-      });
-
       return { success: true };
     } catch (error) {
       this.logger.error(`Error logging activity for user ${userId}:`, error);
@@ -73,6 +73,13 @@ export class ActivityService {
         return { success: true, acceptedEvents: 0 };
       }
 
+      // Always stamp lastActivityAt first so the user's online status stays
+      // accurate even when event collection (monitoring) is disabled.
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lastActivityAt: new Date() },
+      });
+
       const canAcceptEvent = await this.canAcceptActivityEvent(userId);
       if (!canAcceptEvent) {
         return {
@@ -83,12 +90,6 @@ export class ActivityService {
       }
 
       this.bufferActivityEvents(userId, activityEvents);
-
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { lastActivityAt: new Date() },
-      });
-
       return { success: true, acceptedEvents: activityEvents.length };
     } catch (error) {
       this.logger.error(
@@ -626,8 +627,19 @@ export class ActivityService {
 
   // ─── Agent heartbeat / offline ─────────────────────────────────────────────
 
-  /**
-   * Called by the desktop agent every ~60 s while the PC is on.
+  /**   * Called by the browser Angular app every ~60 s while logged in.
+   * Keeps the user showing as online independently of keyboard/mouse events
+   * and regardless of whether monitoring is enabled.
+   */
+  async recordBrowserHeartbeat(userId: number): Promise<{ ok: boolean }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActivityAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /**   * Called by the desktop agent every ~60 s while the PC is on.
    * Keeps the user's lastActivityAt fresh so they appear online even when idle.
    */
   async recordHeartbeat(userId: number): Promise<{ ok: boolean }> {
