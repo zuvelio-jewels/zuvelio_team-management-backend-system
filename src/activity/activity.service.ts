@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { CreateActivityEventDto, GetActivitySummaryDto } from './dto';
@@ -498,9 +499,11 @@ export class ActivityService {
   }
 
   /**
-   * Scheduled job to aggregate hourly statistics from events
-   * Should be called every hour by a scheduler
+   * Scheduled job to aggregate hourly statistics from events.
+   * Runs at the top of every hour (e.g., 09:00, 10:00, ...) and processes
+   * the PREVIOUS hour's raw ActivityEvent records into ActivitySummary rows.
    */
+  @Cron(CronExpression.EVERY_HOUR)
   async aggregateHourlyStats() {
     try {
       this.logger.debug('Starting hourly activity aggregation...');
@@ -587,34 +590,42 @@ export class ActivityService {
 
         const taskIdForUpsert = group.taskId ?? null;
 
-        const whereClause: any = {
-          userId: group.userId,
-          date: lastHour,
-          hour: lastHour.getHours(),
-          taskId: taskIdForUpsert,
-        };
-
-        await this.prisma.activitySummary.upsert({
+        // Use findFirst + update/create instead of upsert because PostgreSQL
+        // treats NULL != NULL in unique-constraint conflict detection, so
+        // prisma's upsert fails to detect the conflict when taskId is null.
+        const existing = await this.prisma.activitySummary.findFirst({
           where: {
-            userId_date_hour_taskId: whereClause,
-          },
-          update: {
-            totalKeystrokes: keystrokes,
-            totalClicks: clicks,
-            totalMouseMovement: mouseMovement,
-            idleTimeMinutes,
-          },
-          create: {
             userId: group.userId,
             date: lastHour,
             hour: lastHour.getHours(),
-            taskId: group.taskId,
-            totalKeystrokes: keystrokes,
-            totalClicks: clicks,
-            totalMouseMovement: mouseMovement,
-            idleTimeMinutes,
+            taskId: taskIdForUpsert,
           },
         });
+
+        if (existing) {
+          await this.prisma.activitySummary.update({
+            where: { id: existing.id },
+            data: {
+              totalKeystrokes: keystrokes,
+              totalClicks: clicks,
+              totalMouseMovement: mouseMovement,
+              idleTimeMinutes,
+            },
+          });
+        } else {
+          await this.prisma.activitySummary.create({
+            data: {
+              userId: group.userId,
+              date: lastHour,
+              hour: lastHour.getHours(),
+              taskId: taskIdForUpsert,
+              totalKeystrokes: keystrokes,
+              totalClicks: clicks,
+              totalMouseMovement: mouseMovement,
+              idleTimeMinutes,
+            },
+          });
+        }
       }
 
       this.logger.debug(

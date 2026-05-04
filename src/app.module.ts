@@ -2,6 +2,7 @@ import * as path from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -26,6 +27,7 @@ import { NotificationModule } from './notifications/notification.module';
       ],
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -41,4 +43,4 @@ import { NotificationModule } from './notifications/notification.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
