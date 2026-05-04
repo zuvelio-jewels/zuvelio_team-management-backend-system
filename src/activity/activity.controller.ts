@@ -437,7 +437,7 @@ export class ActivityController {
         'net session >nul 2>&1',
         'if %errorlevel% neq 0 (',
         '    echo Requesting administrator access...',
-        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -WorkingDirectory \'%~dp0\' -Verb RunAs"',
+        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process \'cmd.exe\' -ArgumentList \'/K %~sf0\' -WorkingDirectory \'%~dp0\' -Verb RunAs"',
         '    exit /b',
         ')',
         '',
@@ -543,6 +543,7 @@ export class ActivityController {
         '@echo off',
         'cd /d "%~dp0"',
         'call "INSTALL_OFFICE_TRACKING.bat"',
+        'pause',
         '',
       ].join('\r\n');
       zip.file('ONE_CLICK_INSTALL.bat', oneClickFallback);
@@ -638,6 +639,7 @@ export class ActivityController {
         'echo to keep any browser or app open for tracking to work.',
         'echo.',
         'call "INSTALL_OFFICE_TRACKING.bat"',
+        'pause',
         '',
       ].join('\r\n');
       zip.file('EMPLOYEE_SETUP.bat', employeeSetupFallback);
