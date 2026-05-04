@@ -4,7 +4,7 @@ import { UsersService } from './users.service';
 
 const mockUsers = [
   { id: 1, name: 'Alice', email: 'alice@test.com', role: 'EMPLOYEE' },
-  { id: 2, name: 'Bob',   email: 'bob@test.com',   role: 'MANAGER'  },
+  { id: 2, name: 'Bob', email: 'bob@test.com', role: 'MANAGER' },
 ];
 
 const mockUsersService = {

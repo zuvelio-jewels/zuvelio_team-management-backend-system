@@ -624,6 +624,33 @@ export class ActivityService {
     }
   }
 
+  // ─── Agent heartbeat / offline ─────────────────────────────────────────────
+
+  /**
+   * Called by the desktop agent every ~60 s while the PC is on.
+   * Keeps the user's lastActivityAt fresh so they appear online even when idle.
+   */
+  async recordHeartbeat(userId: number): Promise<{ ok: boolean }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActivityAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Called by the desktop agent during controlled shutdown (PC shutdown / user
+   * logout). Sets lastActivityAt to null so the user appears offline immediately
+   * rather than waiting for the 5-minute stale-data timeout.
+   */
+  async recordOffline(userId: number): Promise<{ ok: boolean }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastActivityAt: null },
+    });
+    return { ok: true };
+  }
+
   // ─── Device Token Management ───────────────────────────────────────────────
 
   private async createDeviceTokenForUser(userId: number, deviceName?: string) {

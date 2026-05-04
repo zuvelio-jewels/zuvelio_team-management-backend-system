@@ -238,6 +238,29 @@ export class ActivityController {
     return this.sendSetupPackage(res, req, device.token, req.user.id);
   }
 
+  // ─── Agent heartbeat / offline ─────────────────────────────────────────────
+
+  /**
+   * POST /activity/agent/heartbeat
+   * Desktop agent calls this every ~60 s to keep the user showing as online
+   * while the PC is powered on, even during mouse/keyboard idle periods.
+   */
+  @Post('agent/heartbeat')
+  async agentHeartbeat(@Req() req) {
+    return this.activityService.recordHeartbeat(req.user.id);
+  }
+
+  /**
+   * POST /activity/agent/offline
+   * Desktop agent calls this on controlled shutdown (PC shutdown / session end).
+   * Marks the user offline immediately instead of waiting for the 5-min stale
+   * timeout.
+   */
+  @Post('agent/offline')
+  async agentOffline(@Req() req) {
+    return this.activityService.recordOffline(req.user.id);
+  }
+
   // ─── Device Token Endpoints ────────────────────────────────────────────────
 
   @Post('agent/register-device')
