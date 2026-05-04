@@ -187,6 +187,10 @@ export class ProjectionService {
             },
             include: {
                 timeLogs: { select: { actualDuration: true } },
+                projectionActions: {
+                    where: { actionType: 'REQUEST_TIME' },
+                    select: { details: true },
+                },
             },
             orderBy: { completedAt: 'desc' },
             take: limit,
