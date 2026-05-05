@@ -25,12 +25,11 @@ function Write-Step($n, $total, $text) {
 function Write-OK($t) { Write-Host "        OK  $t" -ForegroundColor Green }
 function Write-Fail($t) { Write-Host "      FAIL  $t" -ForegroundColor Red; pause; exit 1 }
 
-# ── Step 1: Check Node.js ──────────────────────────────────────────────────────
+# ── Step 1: Check / Auto-install Node.js ──────────────────────────────────────
 Write-Banner
 Write-Step 1 5 "Checking Node.js..."
 
 if (-not (Test-Path $NODE_EXE)) {
-    # Try PATH
     $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
     $nodeFallback = if ($nodeCmd) { $nodeCmd.Source } else { $null }
     if ($nodeFallback) {
@@ -38,18 +37,47 @@ if (-not (Test-Path $NODE_EXE)) {
         Write-OK "Node.js found at $NODE_EXE"
     }
     else {
-        Write-Host ""
-        Write-Host "  ✗ Node.js is NOT installed on this PC." -ForegroundColor Red
-        Write-Host ""
-        Write-Host "  Please install Node.js first:" -ForegroundColor Yellow
-        Write-Host "    1. Open browser → go to  https://nodejs.org" -ForegroundColor White
-        Write-Host "    2. Click 'LTS' download button" -ForegroundColor White
-        Write-Host "    3. Run the installer (keep all default settings)" -ForegroundColor White
-        Write-Host "    4. Restart this PC" -ForegroundColor White
-        Write-Host "    5. Then run INSTALL_ANY_PC.bat again" -ForegroundColor White
-        Write-Host ""
-        pause
-        exit 1
+        Write-Host "  Node.js not found. Downloading and installing automatically..." -ForegroundColor Yellow
+
+        # Get latest LTS version number from nodejs.org
+        try {
+            $releases = Invoke-RestMethod "https://nodejs.org/dist/index.json" -TimeoutSec 30
+            $lts = $releases | Where-Object { $_.lts -ne $false } | Select-Object -First 1
+            $version = $lts.version
+        }
+        catch {
+            $version = "v22.15.0"  # known good LTS fallback
+        }
+
+        $arch = if ([Environment]::Is64BitOperatingSystem) { "x64" } else { "x86" }
+        $msiUrl = "https://nodejs.org/dist/$version/node-$version-$arch.msi"
+        $msiPath = "$env:TEMP\node-installer.msi"
+
+        Write-Host "  Downloading Node.js $version..." -ForegroundColor Gray
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.DownloadFile($msiUrl, $msiPath)
+        }
+        catch {
+            Write-Fail "Could not download Node.js. Check internet connection and try again."
+        }
+
+        Write-Host "  Installing Node.js (this takes ~30 seconds)..." -ForegroundColor Gray
+        $msiResult = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$msiPath`" /qn /norestart ADDLOCAL=ALL" -Wait -PassThru
+        if ($msiResult.ExitCode -ne 0) {
+            Write-Fail "Node.js installer failed (exit $($msiResult.ExitCode)). Try installing manually from https://nodejs.org"
+        }
+
+        # Refresh PATH so node.exe is found in this session
+        $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
+        $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        $NODE_EXE = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Program Files\nodejs\node.exe" }
+
+        if (-not (Test-Path $NODE_EXE)) {
+            Write-Fail "Node.js installed but not found. Please restart this PC and run INSTALL_ANY_PC.bat again."
+        }
+        $nodeVer = & $NODE_EXE --version 2>&1
+        Write-OK "Node.js $nodeVer installed successfully"
     }
 }
 else {

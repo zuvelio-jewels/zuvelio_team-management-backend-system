@@ -4,6 +4,9 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "assets": ["activity/agent-index.js", "activity/agent-installer.ps1"]
+    "assets": [
+      "activity/agent-index.js",
+      "activity/agent-installer.ps1"
+    ]
   }
 }
