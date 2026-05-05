@@ -220,13 +220,41 @@ export class ActivityController {
     @Query('deviceName') deviceName: string,
     @Res() res: Response,
   ) {
+    // Build API URL for embedding in .env
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || req.protocol || 'https';
+    const apiUrl = process.env.ACTIVITY_AGENT_API_URL || `${protocol}://${req.get('host')}/api`;
+
+    // Create a device token for the logged-in user
+    const device = await this.activityService.registerSelfDevice(
+      req.user.id,
+      `PC-${req.user.name || req.user.email || 'user'}-${Date.now()}`,
+    );
+    const envContent = [
+      `API_URL=${apiUrl}`,
+      `DEVICE_TOKEN=${device.token}`,
+      `EMPLOYEE_NAME=${req.user.name || req.user.email || ''}`,
+      'FLUSH_INTERVAL_MS=5000',
+      'MOUSE_MOVE_SAMPLE_MS=1000',
+      'IDLE_THRESHOLD_MS=300000',
+      'HEARTBEAT_INTERVAL_MS=60000',
+      'SESSION_ID=desktop-agent',
+    ].join('\n');
+
+    // Helper to inject .env into any ZIP buffer
+    const injectEnv = async (buf: Buffer): Promise<Buffer> => {
+      const z = await JSZip.loadAsync(buf);
+      z.file('.env', envContent);
+      return z.generateAsync({ type: 'nodebuffer' });
+    };
+
     // 1. Railway / production: if a pre-built ZIP URL is configured, proxy it
     //    Set AGENT_SETUP_ZIP_URL in Railway env to your GitHub release download URL.
     const setupZipUrl = process.env.AGENT_SETUP_ZIP_URL;
     if (setupZipUrl) {
       const r = await fetch(setupZipUrl);
       if (r.ok) {
-        const buf = Buffer.from(await r.arrayBuffer());
+        const buf = await injectEnv(Buffer.from(await r.arrayBuffer()));
         res.setHeader('Content-Type', 'application/zip');
         res.setHeader('Content-Disposition', 'attachment; filename="ZuvelioSetup.zip"');
         return res.send(buf);
@@ -238,10 +266,16 @@ export class ActivityController {
       join(this.getAgentRoot(), 'ZuvelioSetup.zip'),
     ]);
     if (prebuiltSetupPath) {
-      return res.download(
-        prebuiltSetupPath,
-        `zuvelio-activity-setup-user-${req.user.id}.zip`,
+      const rawBuf = await import('fs/promises').then((fs) =>
+        fs.readFile(prebuiltSetupPath),
       );
+      const buf = await injectEnv(rawBuf);
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="ZuvelioSetup.zip"`,
+      );
+      return res.send(buf);
     }
 
     // 3. Last resort: generate ZIP on-the-fly (no src/index.js on Railway)

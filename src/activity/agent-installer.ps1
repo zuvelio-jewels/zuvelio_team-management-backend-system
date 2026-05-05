@@ -85,69 +85,86 @@ else {
     Write-OK "Node.js $nodeVer"
 }
 
-# ── Step 2: Fetch employee list from backend ───────────────────────────────────
-Write-Step 2 5 "Connecting to Zuvelio server..."
-
-# Login as admin to fetch employee list and generate token
-$adminCreds = @{ email = "admin@zuvelio.com"; password = "Admin@123" } | ConvertTo-Json -Compress
-try {
-    $authResp = Invoke-RestMethod -Uri "$API_URL/auth/login" -Method POST -ContentType "application/json" -Body $adminCreds -TimeoutSec 15
-}
-catch {
-    Write-Fail "Cannot connect to Zuvelio server. Check your internet connection and try again.`n        Error: $_"
-}
-$jwt = $authResp.accessToken
-Write-OK "Connected to Zuvelio server"
-
-$hdrs = @{ Authorization = "Bearer $jwt" }
-try {
-    $employees = Invoke-RestMethod -Uri "$API_URL/activity/admin/employees" -Headers $hdrs -TimeoutSec 15
-}
-catch {
-    Write-Fail "Could not fetch employee list: $_"
-}
-
-# ── Step 3: Pick employee ──────────────────────────────────────────────────────
-Write-Step 3 5 "Who is using this PC?"
-Write-Host ""
-Write-Host "  Select your name from the list below:" -ForegroundColor White
-Write-Host ""
-
-$i = 1
-$selectable = @()
-foreach ($emp in $employees) {
-    # Show all users (employees, managers, admin)
-    $roleTag = "[$($emp.role.Substring(0,3))]"
-    Write-Host ("    {0,2}.  {1,-25} {2}" -f $i, $emp.name, $roleTag) -ForegroundColor White
-    $selectable += $emp
-    $i++
-}
-
-Write-Host ""
-$choice = 0
-while ($choice -lt 1 -or $choice -gt $selectable.Count) {
-    $raw = Read-Host "  Enter number (1-$($selectable.Count))"
-    if ($raw -match '^\d+$') { $choice = [int]$raw }
-}
-
-$target = $selectable[$choice - 1]
-Write-Host ""
-Write-Host "  Selected: $($target.name) ($($target.role))" -ForegroundColor Cyan
-Write-Host ""
-
-# ── Step 4: Create device token for selected user ─────────────────────────────
-Write-Step 4 5 "Registering this PC..."
-
+# ── Steps 2-4: Check pre-configured .env (downloaded from dashboard) ──────────
+$token = $null
+$employeeName = "Employee"
 $deviceName = "PC-$(hostname)-$(Get-Date -Format 'yyyy-MM-dd')"
-$regBody = @{ userId = $target.id; deviceName = $deviceName } | ConvertTo-Json -Compress
-try {
-    $device = Invoke-RestMethod -Uri "$API_URL/activity/agent/register-device" -Method POST -ContentType "application/json" -Headers $hdrs -Body $regBody -TimeoutSec 15
+$preConfigured = $false
+
+$preEnvPath = Join-Path $SCRIPT_DIR ".env"
+if (Test-Path $preEnvPath) {
+    $preEnv = Get-Content $preEnvPath -Raw
+    $tokenMatch = [regex]::Match($preEnv, 'DEVICE_TOKEN=(.+)')
+    $nameMatch  = [regex]::Match($preEnv, 'EMPLOYEE_NAME=(.+)')
+    if ($tokenMatch.Success -and $tokenMatch.Groups[1].Value.Trim().Length -gt 10) {
+        $token = $tokenMatch.Groups[1].Value.Trim()
+        $employeeName = if ($nameMatch.Success) { $nameMatch.Groups[1].Value.Trim() } else { "Employee" }
+        $preConfigured = $true
+        Write-Step 2 5 "Account detected from dashboard..."
+        Write-OK "Account: $employeeName"
+        Write-Step 3 5 "Name selection: skipped (auto-configured)"
+        Write-OK "No manual selection needed"
+        Write-Step 4 5 "Device registration: skipped (token ready)"
+        Write-OK "Token pre-configured"
+    }
 }
-catch {
-    Write-Fail "Could not register device: $_"
+
+if (-not $preConfigured) {
+    # ── Step 2: Fetch employee list from backend ───────────────────────────────
+    Write-Step 2 5 "Connecting to Zuvelio server..."
+    $adminCreds = @{ email = "admin@zuvelio.com"; password = "Admin@123" } | ConvertTo-Json -Compress
+    try {
+        $authResp = Invoke-RestMethod -Uri "$API_URL/auth/login" -Method POST -ContentType "application/json" -Body $adminCreds -TimeoutSec 15
+    }
+    catch {
+        Write-Fail "Cannot connect to Zuvelio server. Check your internet connection and try again.`n        Error: $_"
+    }
+    $jwt = $authResp.accessToken
+    Write-OK "Connected to Zuvelio server"
+
+    $hdrs = @{ Authorization = "Bearer $jwt" }
+    try {
+        $employees = Invoke-RestMethod -Uri "$API_URL/activity/admin/employees" -Headers $hdrs -TimeoutSec 15
+    }
+    catch {
+        Write-Fail "Could not fetch employee list: $_"
+    }
+
+    # ── Step 3: Pick employee ──────────────────────────────────────────────────
+    Write-Step 3 5 "Who is using this PC?"
+    Write-Host ""
+    Write-Host "  Select your name from the list below:" -ForegroundColor White
+    Write-Host ""
+    $i = 1; $selectable = @()
+    foreach ($emp in $employees) {
+        $roleTag = "[$($emp.role.Substring(0,3))]"
+        Write-Host ("    {0,2}.  {1,-25} {2}" -f $i, $emp.name, $roleTag) -ForegroundColor White
+        $selectable += $emp; $i++
+    }
+    Write-Host ""
+    $choice = 0
+    while ($choice -lt 1 -or $choice -gt $selectable.Count) {
+        $raw = Read-Host "  Enter number (1-$($selectable.Count))"
+        if ($raw -match '^\d+$') { $choice = [int]$raw }
+    }
+    $target = $selectable[$choice - 1]
+    $employeeName = $target.name
+    Write-Host ""
+    Write-Host "  Selected: $employeeName ($($target.role))" -ForegroundColor Cyan
+    Write-Host ""
+
+    # ── Step 4: Create device token ────────────────────────────────────────────
+    Write-Step 4 5 "Registering this PC..."
+    $regBody = @{ userId = $target.id; deviceName = $deviceName } | ConvertTo-Json -Compress
+    try {
+        $device = Invoke-RestMethod -Uri "$API_URL/activity/agent/register-device" -Method POST -ContentType "application/json" -Headers $hdrs -Body $regBody -TimeoutSec 15
+    }
+    catch {
+        Write-Fail "Could not register device: $_"
+    }
+    $token = $device.token
+    Write-OK "Device registered: $deviceName"
 }
-$token = $device.token
-Write-OK "Device registered: $deviceName"
 
 # ── Step 5: Install agent files ───────────────────────────────────────────────
 Write-Step 5 5 "Installing activity agent..."
@@ -189,6 +206,7 @@ Write-OK "Agent files installed"
 $envContent = @"
 API_URL=$API_URL
 DEVICE_TOKEN=$token
+EMPLOYEE_NAME=$employeeName
 FLUSH_INTERVAL_MS=5000
 MOUSE_MOVE_SAMPLE_MS=1000
 IDLE_THRESHOLD_MS=300000
@@ -224,7 +242,7 @@ Write-Host "  ╔═════════════════════
 Write-Host "  ║                    INSTALLATION COMPLETE!                       ║" -ForegroundColor Green
 Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Employee  : $($target.name)" -ForegroundColor White
+  Write-Host "  Employee  : $employeeName" -ForegroundColor White
 Write-Host "  Device    : $deviceName" -ForegroundColor White
 Write-Host "  Status    : Tracking is now ACTIVE" -ForegroundColor Green
 Write-Host ""
