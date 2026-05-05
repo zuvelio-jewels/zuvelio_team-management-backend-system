@@ -742,10 +742,14 @@ export class ActivityController {
       process.env.ACTIVITY_AGENT_API_URL || `${protocol}://${host}/api`;
 
     // ── src/index.js ───────────────────────────────────────────────────────
+    // Priority: (1) local dev folder, (2) bundled asset in dist (Railway), (3) env URL
     const localIndexJs = join(agentRoot, 'src', 'index.js');
+    const assetIndexJs = join(__dirname, 'agent-index.js'); // copied by nest-cli assets
     const indexJsUrl = process.env.AGENT_INDEX_JS_URL || '';
     if (existsSync(localIndexJs)) {
       zip.file('src/index.js', readFileSync(localIndexJs, 'utf8'));
+    } else if (existsSync(assetIndexJs)) {
+      zip.file('src/index.js', readFileSync(assetIndexJs, 'utf8'));
     } else if (indexJsUrl) {
       const r = await fetch(indexJsUrl);
       if (r.ok) zip.file('src/index.js', await r.text());
@@ -786,10 +790,12 @@ export class ActivityController {
 
     // ── INSTALL_ANY_PC.ps1 ─────────────────────────────────────────────────
     const localPs1 = join(agentRoot, 'INSTALL_ANY_PC.ps1');
+    const assetPs1 = join(__dirname, 'agent-installer.ps1');
     if (existsSync(localPs1)) {
       zip.file('INSTALL_ANY_PC.ps1', readFileSync(localPs1, 'utf8'));
+    } else if (existsSync(assetPs1)) {
+      zip.file('INSTALL_ANY_PC.ps1', readFileSync(assetPs1, 'utf8'));
     } else {
-      // Inline fallback (same logic as local file)
       const ps1 = this.buildUniversalInstallerPs1(apiUrl);
       zip.file('INSTALL_ANY_PC.ps1', ps1);
     }
@@ -845,7 +851,8 @@ Write-Banner
 # Check Node.js
 Write-Step 1 5 "Checking Node.js..."
 if (-not (Test-Path $NODE_EXE)) {
-    $nodeFallback = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    $nodeFallback = if ($nodeCmd) { $nodeCmd.Source } else { $null }
     if ($nodeFallback) { $NODE_EXE = $nodeFallback; Write-OK "Node.js found" }
     else {
         Write-Host "  Node.js is NOT installed." -ForegroundColor Red
@@ -900,7 +907,13 @@ Copy-Item (Join-Path $SCRIPT_DIR "package.json") (Join-Path $INSTALL_DIR "packag
 Write-Host "       Installing dependencies (npm install ~30s)..." -ForegroundColor Gray
 $npmExe = Join-Path (Split-Path $NODE_EXE) "npm.cmd"
 if (-not (Test-Path $npmExe)) { $npmExe = "npm" }
-Start-Process -FilePath $npmExe -ArgumentList "install","--production","--prefix",$INSTALL_DIR -Wait -WindowStyle Hidden
+$prevPref = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+Push-Location $INSTALL_DIR
+& $npmExe install --omit=dev 2>&1 | ForEach-Object { Write-Host "       $_" -ForegroundColor Gray }
+$npmExit = $LASTEXITCODE
+Pop-Location
+$ErrorActionPreference = $prevPref
+if ($npmExit -ne 0) { Write-Fail "npm install failed (exit $npmExit). See output above." }
 @"
 API_URL=$API_URL
 DEVICE_TOKEN=$($token)
