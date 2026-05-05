@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsEnum,
   IsArray,
+  IsDateString,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -36,6 +37,16 @@ export class CreateActivityEventDto {
   @IsOptional()
   @IsString()
   sessionId?: string;
+
+  /**
+   * Optional ISO-8601 timestamp of when the event actually occurred.
+   * The desktop agent sends the precise event time so the backend stores
+   * accurate data even when events are batched or replayed from the offline queue.
+   * Falls back to server-received time when omitted.
+   */
+  @IsOptional()
+  @IsDateString()
+  timestamp?: string;
 }
 
 export class CreateActivityBatchDto {

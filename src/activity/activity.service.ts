@@ -27,6 +27,15 @@ export class ActivityService {
     }>
   > = new Map();
 
+  /**
+   * In-memory cache for MonitoringConfig records.
+   * Avoids a DB query on every single event batch.
+   * Entries expire after CONFIG_CACHE_TTL_MS and are invalidated immediately
+   * whenever the config is updated or monitoring is toggled.
+   */
+  private configCache = new Map<number, { config: any; expiresAt: number }>();
+  private readonly CONFIG_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -115,8 +124,18 @@ export class ActivityService {
       return;
     }
 
-    const now = new Date();
+    const receivedAt = new Date();
     for (const activityEvent of activityEvents) {
+      // Use the agent-supplied timestamp when available so idle-time
+      // calculations reflect the actual event time, not the batch-receive time.
+      let eventTimestamp: Date;
+      if (activityEvent.timestamp) {
+        const parsed = new Date(activityEvent.timestamp);
+        eventTimestamp = isNaN(parsed.getTime()) ? receivedAt : parsed;
+      } else {
+        eventTimestamp = receivedAt;
+      }
+
       buffer.push({
         eventType: activityEvent.eventType,
         keyCode: activityEvent.keyCode,
@@ -125,7 +144,7 @@ export class ActivityService {
         clickType: activityEvent.clickType,
         taskId: activityEvent.taskId,
         sessionId: activityEvent.sessionId,
-        timestamp: now,
+        timestamp: eventTimestamp,
       });
     }
   }
@@ -162,6 +181,12 @@ export class ActivityService {
   }
 
   private async getOrCreateMonitoringConfig(userId: number) {
+    // Serve from cache when still fresh to avoid a DB round-trip on every batch.
+    const cached = this.configCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.config;
+    }
+
     let config = await this.prisma.monitoringConfig.findUnique({
       where: { userId },
     });
@@ -179,6 +204,11 @@ export class ActivityService {
       });
     }
 
+    this.configCache.set(userId, {
+      config,
+      expiresAt: Date.now() + this.CONFIG_CACHE_TTL_MS,
+    });
+
     return config;
   }
 
@@ -190,9 +220,14 @@ export class ActivityService {
     for (const [userId, events] of this.eventBuffer.entries()) {
       if (events.length === 0) continue;
 
+      // Drain the array atomically before the async DB write so that events
+      // arriving concurrently during the write are NOT included in this batch
+      // AND are NOT lost when we clear the buffer on success.
+      const snapshot = events.splice(0);
+
       try {
         await this.prisma.activityEvent.createMany({
-          data: events.map((event) => ({
+          data: snapshot.map((event) => ({
             userId,
             eventType: event.eventType,
             keyCode: event.keyCode,
@@ -206,9 +241,16 @@ export class ActivityService {
           skipDuplicates: false,
         });
 
-        this.eventBuffer.delete(userId);
+        // If the array is now empty (no new events arrived during the write),
+        // remove the map entry to free memory.
+        if (events.length === 0) {
+          this.eventBuffer.delete(userId);
+        }
       } catch (error) {
         this.logger.error(`Error flushing events for user ${userId}:`, error);
+        // Return the snapshot to the front of the buffer so it will be retried
+        // on the next flush cycle.
+        events.unshift(...snapshot);
       }
     }
   }
@@ -487,6 +529,9 @@ export class ActivityService {
           createdBy: currentUserId,
         },
       });
+
+      // Invalidate cache so the next request picks up the new config immediately.
+      this.configCache.delete(userId);
 
       return config;
     } catch (error) {
@@ -912,6 +957,9 @@ export class ActivityService {
       update: { isMonitoringEnabled: enabled },
       create: { userId: targetUserId, isMonitoringEnabled: enabled },
     });
+
+    // Invalidate config cache so the change takes effect immediately.
+    this.configCache.delete(targetUserId);
 
     return {
       success: true,
