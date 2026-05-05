@@ -337,16 +337,13 @@ export class ActivityService {
 
       const { startDate, endDate } = query;
 
-      // For now, return all EMPLOYEE activities during the date range
-      // TODO: Implement department/team filtering
+      // Return all users' activities during the date range (no role filter —
+      // admins and managers should also appear in team activity view).
       const teamActivity = await this.prisma.activitySummary.findMany({
         where: {
           date: {
             gte: new Date(startDate),
             lte: new Date(endDate),
-          },
-          user: {
-            role: 'EMPLOYEE',
           },
         },
         include: {

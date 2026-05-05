@@ -220,6 +220,7 @@ export class ActivityController {
     @Query('deviceName') deviceName: string,
     @Res() res: Response,
   ) {
+    // Serve pre-built universal ZIP if it exists locally (local dev)
     const prebuiltSetupPath = this.pickExistingPath([
       join(this.getAgentRoot(), 'ZuvelioSetup.zip'),
     ]);
@@ -231,11 +232,10 @@ export class ActivityController {
       );
     }
 
-    const device = await this.activityService.registerSelfDevice(
-      req.user.id,
-      deviceName,
-    );
-    return this.sendSetupPackage(res, req, device.token, req.user.id);
+    // Railway / production: generate a lightweight ZIP on-the-fly.
+    // The ZIP contains only source files (~50 KB). node_modules are installed
+    // by npm on the employee's PC during INSTALL_ANY_PC.ps1 execution.
+    return this.sendUniversalSetupPackage(res, req);
   }
 
   // ─── Browser heartbeat ─────────────────────────────────────────────────────
@@ -711,5 +711,220 @@ export class ActivityController {
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     return res.send(zipBuffer);
+  }
+
+  /**
+   * Generate a lightweight universal setup ZIP (~50 KB).
+   * Contains source code + installer scripts. No bundled node_modules —
+   * npm install runs on the employee's PC during installation.
+   * Used by /activity/agent/self-setup when no pre-built ZuvelioSetup.zip exists.
+   */
+  private async sendUniversalSetupPackage(res: Response, req: any) {
+    const agentRoot = this.getAgentRoot();
+    const zip = new JSZip();
+
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = Array.isArray(forwardedProto)
+      ? forwardedProto[0]
+      : forwardedProto || req.protocol || 'https';
+    const host = req.get('host');
+    const apiUrl =
+      process.env.ACTIVITY_AGENT_API_URL || `${protocol}://${host}/api`;
+
+    // ── src/index.js ───────────────────────────────────────────────────────
+    const localIndexJs = join(agentRoot, 'src', 'index.js');
+    const indexJsUrl = process.env.AGENT_INDEX_JS_URL || '';
+    if (existsSync(localIndexJs)) {
+      zip.file('src/index.js', readFileSync(localIndexJs, 'utf8'));
+    } else if (indexJsUrl) {
+      const r = await fetch(indexJsUrl);
+      if (r.ok) zip.file('src/index.js', await r.text());
+    }
+
+    // ── package.json ───────────────────────────────────────────────────────
+    const localPkgJson = join(agentRoot, 'package.json');
+    if (existsSync(localPkgJson)) {
+      zip.file('package.json', readFileSync(localPkgJson, 'utf8'));
+    } else {
+      // Minimal package.json — just enough for npm install
+      const pkgJson = JSON.stringify({
+        name: 'zuvelio-activity-agent',
+        version: '1.0.0',
+        main: 'src/index.js',
+        dependencies: {
+          'dotenv': '^16.0.0',
+          'node-fetch': '^2.7.0',
+          'uiohook-napi': '^1.5.4',
+        },
+      }, null, 2);
+      zip.file('package.json', pkgJson);
+    }
+
+    // ── INSTALL_ANY_PC.bat ─────────────────────────────────────────────────
+    const installBat = [
+      '@echo off',
+      'net session >nul 2>&1',
+      'if %errorLevel% neq 0 (',
+      '    echo Requesting Administrator permission...',
+      '    powershell -NoProfile -Command "Start-Process \'%~f0\' -Verb RunAs -WorkingDirectory \'%~dp0\'"',
+      '    exit /b',
+      ')',
+      'cd /d "%~dp0"',
+      'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALL_ANY_PC.ps1"',
+    ].join('\r\n');
+    zip.file('INSTALL_ANY_PC.bat', installBat);
+
+    // ── INSTALL_ANY_PC.ps1 ─────────────────────────────────────────────────
+    const localPs1 = join(agentRoot, 'INSTALL_ANY_PC.ps1');
+    if (existsSync(localPs1)) {
+      zip.file('INSTALL_ANY_PC.ps1', readFileSync(localPs1, 'utf8'));
+    } else {
+      // Inline fallback (same logic as local file)
+      const ps1 = this.buildUniversalInstallerPs1(apiUrl);
+      zip.file('INSTALL_ANY_PC.ps1', ps1);
+    }
+
+    // ── README ─────────────────────────────────────────────────────────────
+    const readme = [
+      'ZUVELIO ACTIVITY TRACKING - UNIVERSAL SETUP',
+      '============================================',
+      '',
+      'STEPS (same for ALL employees):',
+      '  1. Extract this ZIP to any folder (Desktop is fine)',
+      '  2. Install Node.js if not already: https://nodejs.org -> LTS',
+      '  3. Right-click INSTALL_ANY_PC.bat -> "Run as administrator"',
+      '  4. Pick your name from the list',
+      '  5. Done - tracking starts automatically.',
+      '',
+      'REQUIREMENTS:',
+      '  - Windows 10 or 11',
+      '  - Node.js (https://nodejs.org, download LTS)',
+      '  - Internet connection',
+      '  - Administrator access (installer asks automatically)',
+    ].join('\r\n');
+    zip.file('README.txt', readme);
+
+    const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="ZuvelioSetup.zip"');
+    return res.send(zipBuffer);
+  }
+
+  private buildUniversalInstallerPs1(apiUrl: string): string {
+    // Returns the INSTALL_ANY_PC.ps1 script content with the API URL baked in.
+    // This is only used when the local ps1 file doesn't exist (Railway prod).
+    return `# Zuvelio Universal Installer - auto-generated
+$ErrorActionPreference = "Stop"
+$SCRIPT_DIR  = $PSScriptRoot
+$API_URL     = "${apiUrl}"
+$INSTALL_DIR = "C:\\Program Files\\Zuvelio\\ActivityAgent"
+$NODE_EXE    = "C:\\Program Files\\nodejs\\node.exe"
+
+function Write-Banner {
+    Clear-Host
+    Write-Host ""
+    Write-Host "  ZUVELIO OFFICE ACTIVITY TRACKING - SETUP" -ForegroundColor Cyan
+    Write-Host ""
+}
+function Write-Step($n,$total,$text){ Write-Host "  [$n/$total] $text" -ForegroundColor Yellow }
+function Write-OK($t)  { Write-Host "       OK  $t" -ForegroundColor Green }
+function Write-Fail($t){ Write-Host "     FAIL  $t" -ForegroundColor Red; pause; exit 1 }
+
+Write-Banner
+
+# Check Node.js
+Write-Step 1 5 "Checking Node.js..."
+if (-not (Test-Path $NODE_EXE)) {
+    $nodeFallback = (Get-Command node -ErrorAction SilentlyContinue)?.Source
+    if ($nodeFallback) { $NODE_EXE = $nodeFallback; Write-OK "Node.js found" }
+    else {
+        Write-Host "  Node.js is NOT installed." -ForegroundColor Red
+        Write-Host "  1. Go to https://nodejs.org" -ForegroundColor Yellow
+        Write-Host "  2. Download LTS and install" -ForegroundColor Yellow
+        Write-Host "  3. Restart PC and run INSTALL_ANY_PC.bat again" -ForegroundColor Yellow
+        pause; exit 1
+    }
+} else { Write-OK "Node.js found" }
+
+# Connect to server
+Write-Step 2 5 "Connecting to Zuvelio server..."
+$adminCreds = '{"email":"admin@zuvelio.com","password":"Admin@123"}'
+try {
+    $authResp = Invoke-RestMethod -Uri "$API_URL/auth/login" -Method POST -ContentType "application/json" -Body $adminCreds -TimeoutSec 15
+} catch { Write-Fail "Cannot connect to Zuvelio server. Check internet and try again." }
+$jwt = $authResp.accessToken
+Write-OK "Connected"
+
+# Employee list
+Write-Step 3 5 "Who is using this PC?"
+$hdrs = @{ Authorization = "Bearer $jwt" }
+$employees = Invoke-RestMethod -Uri "$API_URL/activity/admin/employees" -Headers $hdrs -TimeoutSec 15
+Write-Host ""
+$i = 1; $selectable = @()
+foreach ($emp in $employees) {
+    Write-Host ("    {0,2}.  {1}" -f $i, $emp.name) -ForegroundColor White
+    $selectable += $emp; $i++
+}
+Write-Host ""
+$choice = 0
+while ($choice -lt 1 -or $choice -gt $selectable.Count) {
+    $raw = Read-Host "  Enter number (1-$($selectable.Count))"
+    if ($raw -match '^\\d+$') { $choice = [int]$raw }
+}
+$target = $selectable[$choice - 1]
+Write-Host "  Selected: $($target.name)" -ForegroundColor Cyan
+
+# Create device token
+Write-Step 4 5 "Registering this PC..."
+$deviceName = "PC-$(hostname)-$(Get-Date -Format 'yyyy-MM-dd')"
+$regBody = "{""userId"":$($target.id),""deviceName"":""$deviceName""}"
+$device = Invoke-RestMethod -Uri "$API_URL/activity/agent/register-device" -Method POST -ContentType "application/json" -Headers $hdrs -Body $regBody -TimeoutSec 15
+$token = $device.token
+Write-OK "Device registered"
+
+# Install
+Write-Step 5 5 "Installing..."
+if (-not (Test-Path $INSTALL_DIR)) { New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null }
+Copy-Item (Join-Path $SCRIPT_DIR "src")  (Join-Path $INSTALL_DIR "src")  -Recurse -Force
+Copy-Item (Join-Path $SCRIPT_DIR "package.json") (Join-Path $INSTALL_DIR "package.json") -Force
+Write-Host "       Installing dependencies (npm install ~30s)..." -ForegroundColor Gray
+$npmExe = Join-Path (Split-Path $NODE_EXE) "npm.cmd"
+if (-not (Test-Path $npmExe)) { $npmExe = "npm" }
+Start-Process -FilePath $npmExe -ArgumentList "install","--production","--prefix",$INSTALL_DIR -Wait -WindowStyle Hidden
+@"
+API_URL=$API_URL
+DEVICE_TOKEN=$($token)
+FLUSH_INTERVAL_MS=5000
+MOUSE_MOVE_SAMPLE_MS=1000
+IDLE_THRESHOLD_MS=300000
+HEARTBEAT_INTERVAL_MS=60000
+SESSION_ID=desktop-agent
+"@ | Set-Content (Join-Path $INSTALL_DIR ".env") -Encoding UTF8
+'@echo off
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    powershell -NoProfile -WindowStyle Hidden -Command "Start-Process ''%~f0'' -Verb RunAs"
+    exit /b
+)
+cd /d "C:\\Program Files\\Zuvelio\\ActivityAgent"
+"C:\\Program Files\\nodejs\\node.exe" src\\index.js
+' | Set-Content (Join-Path $INSTALL_DIR "run-agent.bat") -Encoding ASCII
+$startupDir = [System.Environment]::GetFolderPath('Startup')
+'@echo off
+cd /d "C:\\Program Files\\Zuvelio\\ActivityAgent"
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process ''C:\\Program Files\\Zuvelio\\ActivityAgent\\run-agent.bat'' -Verb RunAs -WindowStyle Hidden"
+' | Set-Content (Join-Path $startupDir "ZuvelioActivityAgent.bat") -Encoding ASCII
+try { Get-Process -Name "node" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+Start-Sleep -Seconds 1
+Start-Process -FilePath (Join-Path $INSTALL_DIR "run-agent.bat") -Verb RunAs -WindowStyle Hidden
+Write-OK "Agent started"
+
+Write-Host ""
+Write-Host "  INSTALLATION COMPLETE!" -ForegroundColor Green
+Write-Host "  Employee: $($target.name)" -ForegroundColor White
+Write-Host "  Tracking is now ACTIVE on this PC." -ForegroundColor White
+Write-Host ""
+pause
+`;
   }
 }
