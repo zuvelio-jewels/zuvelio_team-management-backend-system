@@ -220,11 +220,23 @@ export class ActivityController {
     @Query('deviceName') deviceName: string,
     @Res() res: Response,
   ) {
-    // Serve pre-built universal ZIP if it exists locally (local dev)
+    // 1. Railway / production: if a pre-built ZIP URL is configured, proxy it
+    //    Set AGENT_SETUP_ZIP_URL in Railway env to your GitHub release download URL.
+    const setupZipUrl = process.env.AGENT_SETUP_ZIP_URL;
+    if (setupZipUrl) {
+      const r = await fetch(setupZipUrl);
+      if (r.ok) {
+        const buf = Buffer.from(await r.arrayBuffer());
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="ZuvelioSetup.zip"');
+        return res.send(buf);
+      }
+    }
+
+    // 2. Local dev: serve pre-built ZIP from activity-monitor-agent folder
     const prebuiltSetupPath = this.pickExistingPath([
       join(this.getAgentRoot(), 'ZuvelioSetup.zip'),
     ]);
-
     if (prebuiltSetupPath) {
       return res.download(
         prebuiltSetupPath,
@@ -232,9 +244,7 @@ export class ActivityController {
       );
     }
 
-    // Railway / production: generate a lightweight ZIP on-the-fly.
-    // The ZIP contains only source files (~50 KB). node_modules are installed
-    // by npm on the employee's PC during INSTALL_ANY_PC.ps1 execution.
+    // 3. Last resort: generate ZIP on-the-fly (no src/index.js on Railway)
     return this.sendUniversalSetupPackage(res, req);
   }
 
