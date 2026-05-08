@@ -13,6 +13,7 @@ import { CreateActivityEventDto, GetActivitySummaryDto } from './dto';
 @Injectable()
 export class ActivityService {
   private readonly logger = new Logger(ActivityService.name);
+  private readonly MIN_IDLE_THRESHOLD_MINUTES = 10;
   private eventBuffer: Map<
     number,
     Array<{
@@ -198,7 +199,7 @@ export class ActivityService {
           isMonitoringEnabled: true,
           startWorkHour: 9,
           endWorkHour: 18,
-          idleThresholdMinutes: 5,
+          idleThresholdMinutes: this.MIN_IDLE_THRESHOLD_MINUTES,
           timezoneOffsetHours: 5,
         },
       });
@@ -210,6 +211,16 @@ export class ActivityService {
     });
 
     return config;
+  }
+
+  private getEffectiveIdleThresholdMs(
+    configuredMinutes?: number | null,
+  ): number {
+    const thresholdMinutes = Math.max(
+      this.MIN_IDLE_THRESHOLD_MINUTES,
+      configuredMinutes ?? this.MIN_IDLE_THRESHOLD_MINUTES,
+    );
+    return thresholdMinutes * 60 * 1000;
   }
 
   /**
@@ -406,6 +417,15 @@ export class ActivityService {
         })),
       ];
 
+      // Get user's monitoring config once and enforce a minimum 10-minute
+      // inactivity window before idle minutes start accumulating.
+      const config = await this.prisma.monitoringConfig.findUnique({
+        where: { userId },
+      });
+      const idleThresholdMs = this.getEffectiveIdleThresholdMs(
+        config?.idleThresholdMinutes,
+      );
+
       const hourlySummaries = Array.from({ length: 24 }, (_, hour) => ({
         hour,
         totalKeystrokes: 0,
@@ -435,6 +455,55 @@ export class ActivityService {
         }
       }
 
+      const sortedTimestamps = allTodayEvents
+        .map((event) => new Date(event.timestamp).getTime())
+        .filter((ts) => Number.isFinite(ts))
+        .sort((a, b) => a - b);
+
+      const nowMs = Date.now();
+      const todayStartMs = today.getTime();
+      const todayEndMs = tomorrow.getTime();
+      const rangeEndMs = Math.min(Math.max(nowMs, todayStartMs), todayEndMs);
+
+      const addIdleInterval = (startMs: number, endMs: number) => {
+        // Count only the part after the idle threshold, e.g. for a 10-minute
+        // threshold a 16-minute gap contributes 6 idle minutes.
+        const idleStartMs = startMs + idleThresholdMs;
+        if (idleStartMs >= endMs) {
+          return;
+        }
+
+        let cursor = idleStartMs;
+        while (cursor < endMs) {
+          const segmentStart = new Date(cursor);
+          const hour = segmentStart.getHours();
+          const nextHourMs = new Date(
+            segmentStart.getFullYear(),
+            segmentStart.getMonth(),
+            segmentStart.getDate(),
+            segmentStart.getHours() + 1,
+            0,
+            0,
+            0,
+          ).getTime();
+          const segmentEnd = Math.min(endMs, nextHourMs);
+          hourlySummaries[hour].idleTimeMinutes += (segmentEnd - cursor) / 60000;
+          cursor = segmentEnd;
+        }
+      };
+
+      for (let i = 1; i < sortedTimestamps.length; i++) {
+        addIdleInterval(sortedTimestamps[i - 1], sortedTimestamps[i]);
+      }
+
+      if (sortedTimestamps.length > 0) {
+        addIdleInterval(sortedTimestamps[sortedTimestamps.length - 1], rangeEndMs);
+      }
+
+      for (const summary of hourlySummaries) {
+        summary.idleTimeMinutes = Math.max(0, Math.round(summary.idleTimeMinutes));
+      }
+
       const todaySummaries = hourlySummaries.filter(
         (summary) =>
           summary.totalKeystrokes > 0 ||
@@ -445,11 +514,6 @@ export class ActivityService {
 
       // Get current monitoring status
       const monitoringActive = await this.isMonitoringActive(userId);
-
-      // Get user's monitoring config
-      const config = await this.prisma.monitoringConfig.findUnique({
-        where: { userId },
-      });
 
       return {
         date: today,
@@ -514,15 +578,23 @@ export class ActivityService {
         );
       }
 
+      const normalizedUpdateData = { ...updateData };
+      if (normalizedUpdateData.idleThresholdMinutes !== undefined) {
+        normalizedUpdateData.idleThresholdMinutes = Math.max(
+          this.MIN_IDLE_THRESHOLD_MINUTES,
+          normalizedUpdateData.idleThresholdMinutes,
+        );
+      }
+
       const config = await this.prisma.monitoringConfig.upsert({
         where: { userId },
         update: {
-          ...updateData,
+          ...normalizedUpdateData,
           updatedAt: new Date(),
         },
         create: {
           userId,
-          ...updateData,
+          ...normalizedUpdateData,
           createdBy: currentUserId,
         },
       });
@@ -603,15 +675,18 @@ export class ActivityService {
           (e) => e.eventType === 'MOUSE_MOVE',
         ).length;
 
-        // Calculate idle time: sum of gaps between consecutive events that exceed the idle threshold
-        let idleThresholdMs = 5 * 60 * 1000; // default 5 min
+        // Calculate idle time from no-activity gaps; idle starts only after
+        // the threshold window has elapsed.
+        let idleThresholdMs = this.getEffectiveIdleThresholdMs(null);
         if (!idleThresholdCache.has(group.userId)) {
           const config = await this.prisma.monitoringConfig.findUnique({
             where: { userId: group.userId },
             select: { idleThresholdMinutes: true },
           });
-          const thresholdMin = config?.idleThresholdMinutes ?? 5;
-          idleThresholdCache.set(group.userId, thresholdMin * 60 * 1000);
+          idleThresholdCache.set(
+            group.userId,
+            this.getEffectiveIdleThresholdMs(config?.idleThresholdMinutes),
+          );
         }
         idleThresholdMs = idleThresholdCache.get(group.userId)!;
 
@@ -624,9 +699,16 @@ export class ActivityService {
           for (let i = 1; i < sorted.length; i++) {
             const gap = sorted[i] - sorted[i - 1];
             if (gap >= idleThresholdMs) {
-              idleMs += gap;
+              idleMs += gap - idleThresholdMs;
             }
           }
+
+          // Include trailing inactivity in the processed hour up to hour end.
+          const trailingGap = nextHour.getTime() - sorted[sorted.length - 1];
+          if (trailingGap >= idleThresholdMs) {
+            idleMs += trailingGap - idleThresholdMs;
+          }
+
           idleTimeMinutes = Math.round(idleMs / 60000);
         }
 

@@ -62,7 +62,7 @@ const USER_EMAIL = process.env.USER_EMAIL;            // Fallback auth method
 const USER_PASSWORD = process.env.USER_PASSWORD;      // Fallback auth method
 const FLUSH_INTERVAL_MS = Number(process.env.FLUSH_INTERVAL_MS || 5000);
 const MOUSE_MOVE_SAMPLE_MS = Number(process.env.MOUSE_MOVE_SAMPLE_MS || 1000);
-const IDLE_THRESHOLD_MS = Number(process.env.IDLE_THRESHOLD_MS || 300000);
+const IDLE_THRESHOLD_MS = Number(process.env.IDLE_THRESHOLD_MS || 600000);
 const SESSION_ID = process.env.SESSION_ID || `desktop-agent-${randomUUID()}`;
 // How often to ping the server to keep the user showing as "online" even when
 // the keyboard/mouse has been idle beyond IDLE_THRESHOLD_MS.  Default 60 s.

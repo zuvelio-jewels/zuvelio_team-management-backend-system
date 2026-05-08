@@ -143,7 +143,7 @@ export class ActivityController {
         start: config.startWorkHour,
         end: config.endWorkHour,
       },
-      idleThreshold: config.idleThresholdMinutes,
+      idleThreshold: Math.max(10, config.idleThresholdMinutes ?? 10),
     };
   }
 
@@ -236,7 +236,7 @@ export class ActivityController {
       `EMPLOYEE_NAME=${req.user.name || req.user.email || ''}`,
       'FLUSH_INTERVAL_MS=5000',
       'MOUSE_MOVE_SAMPLE_MS=1000',
-      'IDLE_THRESHOLD_MS=300000',
+      'IDLE_THRESHOLD_MS=600000',
       'HEARTBEAT_INTERVAL_MS=60000',
       'SESSION_ID=desktop-agent',
     ].join('\n');
@@ -443,7 +443,7 @@ export class ActivityController {
       `DEVICE_TOKEN=${deviceToken}`,
       'FLUSH_INTERVAL_MS=5000',
       'MOUSE_MOVE_SAMPLE_MS=1000',
-      'IDLE_THRESHOLD_MS=300000',
+      'IDLE_THRESHOLD_MS=600000',
       'HEARTBEAT_INTERVAL_MS=60000',
       'SESSION_ID=desktop-agent',
       '',
@@ -953,7 +953,7 @@ API_URL=$API_URL
 DEVICE_TOKEN=$($token)
 FLUSH_INTERVAL_MS=5000
 MOUSE_MOVE_SAMPLE_MS=1000
-IDLE_THRESHOLD_MS=300000
+IDLE_THRESHOLD_MS=600000
 HEARTBEAT_INTERVAL_MS=60000
 SESSION_ID=desktop-agent
 "@ | Set-Content (Join-Path $INSTALL_DIR ".env") -Encoding UTF8
