@@ -512,12 +512,22 @@ export class ActivityService {
           summary.idleTimeMinutes > 0,
       );
 
+      // Compute the true tracked window: from the very first event today to now.
+      // This avoids the "summaries.length × 60" overcounting when the first
+      // summary only covers a few minutes of an hour (e.g. agent started at 9:55).
+      const firstEventMs =
+        sortedTimestamps.length > 0 ? sortedTimestamps[0] : rangeEndMs;
+      const trackedDurationMinutes = Math.round(
+        (rangeEndMs - firstEventMs) / 60000,
+      );
+
       // Get current monitoring status
       const monitoringActive = await this.isMonitoringActive(userId);
 
       return {
         date: today,
         summaries: todaySummaries,
+        trackedDurationMinutes,
         totalKeystrokes: todaySummaries.reduce(
           (sum, s) => sum + s.totalKeystrokes,
           0,
