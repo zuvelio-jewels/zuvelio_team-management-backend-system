@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Patch,
   Body,
   Get,
   HttpCode,
@@ -21,6 +22,7 @@ import {
   ResetPasswordDto,
   ChangePasswordDto,
   RefreshTokenDto,
+  UpdateProfileDto,
 } from './dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -101,6 +103,15 @@ export class AuthController {
   @Get('profile')
   getProfile(@CurrentUser('id') userId: number) {
     return this.authService.getProfile(userId);
+  }
+
+  @Patch('profile')
+  @HttpCode(HttpStatus.OK)
+  updateProfile(
+    @CurrentUser('id') userId: number,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.authService.updateProfile(userId, dto);
   }
 
   @Post('profile/picture')

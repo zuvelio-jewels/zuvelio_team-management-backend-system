@@ -15,6 +15,7 @@ import {
   LoginDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  UpdateProfileDto,
 } from './dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 import { MailerService } from '../mailer/mailer.service';
@@ -347,6 +348,27 @@ export class AuthService {
         updatedAt: true,
       },
     });
+  }
+
+  async updateProfile(userId: number, dto: UpdateProfileDto) {
+    const existing = await this.prisma.user.findFirst({
+      where: { email: dto.email.toLowerCase().trim(), NOT: { id: userId } },
+    });
+    if (existing) {
+      throw new ConflictException('Email already in use by another account');
+    }
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { name: dto.name.trim(), email: dto.email.toLowerCase().trim() },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        profilePicture: true,
+      },
+    });
+    return user;
   }
 
   async uploadProfilePicture(userId: number, pictureUrl: string) {
