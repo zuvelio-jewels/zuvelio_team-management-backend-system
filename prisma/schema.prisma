@@ -22,6 +22,7 @@ model User {
   passwordResetExpiresAt DateTime?
   failedLoginAttempts    Int       @default(0)
   lockedUntil            DateTime?
+  profilePicture         String?
 
   assignedTasks      Task[]         @relation("AssignedTo")
   allottedTasks      Task[]         @relation("AllottedFrom")

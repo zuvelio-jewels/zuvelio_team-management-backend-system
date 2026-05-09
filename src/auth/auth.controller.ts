@@ -6,8 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import { ClassSerializerInterceptor } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { CloudinaryStorage } from 'multer-storage-cloudinary';
+import { v2 as cloudinary } from 'cloudinary';
 import { AuthService } from './auth.service';
 import {
   RegisterDto,
@@ -20,10 +25,29 @@ import {
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 
+function getAvatarStorage() {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+  });
+  return new CloudinaryStorage({
+    cloudinary,
+    params: {
+      folder: 'zuvelio-avatars',
+      resource_type: 'image',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+    } as any,
+  });
+}
+
+const AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
+
 @Controller('auth')
 @UseInterceptors(ClassSerializerInterceptor)
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Public()
   @Post('register')
@@ -77,5 +101,28 @@ export class AuthController {
   @Get('profile')
   getProfile(@CurrentUser('id') userId: number) {
     return this.authService.getProfile(userId);
+  }
+
+  @Post('profile/picture')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: getAvatarStorage(),
+      limits: { fileSize: MAX_AVATAR_SIZE },
+      fileFilter: (_req, file, cb) => {
+        if (AVATAR_MIME.includes(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new BadRequestException('Only JPG, PNG, or WebP images allowed'), false);
+        }
+      },
+    }),
+  )
+  async uploadProfilePicture(
+    @CurrentUser('id') userId: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    const url: string = (file as any).path;
+    return this.authService.uploadProfilePicture(userId, url);
   }
 }

@@ -31,7 +31,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mailerService: MailerService,
-  ) {}
+  ) { }
 
   async register(dto: RegisterDto) {
     const existing = await this.prisma.user.findUnique({
@@ -157,6 +157,7 @@ export class AuthService {
         name: user.name,
         email: user.email,
         role: user.role,
+        profilePicture: user.profilePicture ?? null,
       },
     };
   }
@@ -341,10 +342,26 @@ export class AuthService {
         email: true,
         role: true,
         isActive: true,
+        profilePicture: true,
         createdAt: true,
         updatedAt: true,
       },
     });
+  }
+
+  async uploadProfilePicture(userId: number, pictureUrl: string) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { profilePicture: pictureUrl },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        profilePicture: true,
+      },
+    });
+    return user;
   }
 
   private async generateTokens(userId: number, email: string, role: string) {
