@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
@@ -184,6 +185,23 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  async resetUserPassword(id: number, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const hashed = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        password: hashed,
+        refreshToken: null,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+    return { message: `Password for ${user.name} has been reset successfully` };
   }
 
   async removeUser(id: number) {

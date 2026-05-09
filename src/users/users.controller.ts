@@ -7,6 +7,7 @@ import {
   Post,
   Delete,
   Body,
+  HttpCode,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
@@ -15,7 +16,7 @@ import { UsersService } from './users.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
-import { ApproveUserDto } from './dto';
+import { ApproveUserDto, AdminResetPasswordDto } from './dto';
 
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
@@ -91,5 +92,16 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.MANAGER)
   removeUser(@Param('id', ParseIntPipe) id: number) {
     return this.usersService.removeUser(id);
+  }
+
+  @Post(':id/reset-password')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @HttpCode(200)
+  resetUserPassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: AdminResetPasswordDto,
+  ) {
+    return this.usersService.resetUserPassword(id, dto.newPassword);
   }
 }
