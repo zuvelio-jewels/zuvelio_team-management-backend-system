@@ -155,7 +155,12 @@ export class ActivityController {
   @Public()
   @Get('agent/version')
   getAgentVersion(@Req() req, @Res() res: Response) {
-    // Read version from dist/version.json shipped alongside the EXE.
+    // Priority: 1) Environment variable (easiest to update on Railway)
+    //           2) version.json file if exists
+    //           3) Default fallback
+    let version = process.env.AGENT_VERSION || '0.2.0';
+
+    // Try to read from version.json if available
     const versionPath = join(
       process.cwd(),
       '..',
@@ -163,8 +168,6 @@ export class ActivityController {
       'dist',
       'version.json',
     );
-
-    let version = '1.0.0';
     if (existsSync(versionPath)) {
       try {
         const parsed = JSON.parse(readFileSync(versionPath, 'utf8'));
@@ -188,10 +191,21 @@ export class ActivityController {
   /**
    * GET /activity/agent/download-exe — PUBLIC, no auth required.
    * Agents download the latest EXE directly here during auto-update.
+   * 
+   * Priority:
+   * 1. AGENT_DOWNLOAD_URL environment variable (for Railway/production)
+   * 2. Local file if exists
    */
   @Public()
   @Get('agent/download-exe')
-  downloadAgentExePublic(@Res() res: Response) {
+  async downloadAgentExePublic(@Res() res: Response) {
+    // Option 1: Redirect to external URL if configured (Railway best practice)
+    const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL;
+    if (exeDownloadUrl) {
+      return res.redirect(exeDownloadUrl);
+    }
+
+    // Option 2: Serve locally if file exists
     const agentPath = join(
       process.cwd(),
       '..',
@@ -201,7 +215,10 @@ export class ActivityController {
     );
 
     if (!existsSync(agentPath)) {
-      throw new NotFoundException('Desktop agent executable not found on server');
+      throw new NotFoundException(
+        'Desktop agent executable not found. ' +
+        'Set AGENT_DOWNLOAD_URL environment variable to redirect to the EXE location.',
+      );
     }
 
     return res.download(agentPath, 'zuvelio-activity-agent.exe');
