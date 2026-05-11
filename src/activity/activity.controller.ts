@@ -519,6 +519,9 @@ export class ActivityController {
     const exePath = this.pickExistingPath([
       join(agentRoot, 'dist', 'zuvelio-activity-agent.exe'),
       join(agentRoot, 'zuvelio-activity-agent.exe'),
+      // Railway/production: exe copied to backend dist
+      join(process.cwd(), 'dist', 'zuvelio-activity-agent.exe'),
+      join(process.cwd(), 'zuvelio-activity-agent.exe'),
     ]);
 
     const installerPath = this.pickExistingPath([
@@ -598,8 +601,8 @@ export class ActivityController {
         ')',
         '',
         'if !EXE_FOUND!==0 (',
-        '    echo Downloading from GitHub... please wait...',
-        '    set "DL_URL=https://github.com/zuvelio-jewels/zuvelio_team-management-backend-system/releases/download/v2.0.1/zuvelio-activity-agent.exe"',
+        '    echo Downloading from server... please wait...',
+        `    set "DL_URL=${apiUrl}/activity/agent/download-exe"`,
         '    set DL_OK=0',
         '',
         '    where curl.exe >nul 2>&1',
@@ -616,9 +619,9 @@ export class ActivityController {
         '    if !DL_OK!==0 (',
         '        echo.',
         '        echo ERROR: Download failed.',
-        '        echo  1. Open https://github.com/zuvelio-jewels/zuvelio_team-management-backend-system/releases',
-        '        echo  2. Download zuvelio-activity-agent.exe',
-        '        echo  3. Put it in this folder, then run EMPLOYEE_SETUP.bat again',
+        `        echo  1. Contact your administrator to get a fresh ZuvelioSetup.zip`,
+        `        echo  2. Or visit: ${apiUrl}/activity/agent/download-exe`,
+        '        echo  3. Put zuvelio-activity-agent.exe in this folder, then run EMPLOYEE_SETUP.bat again',
         '        echo.',
         '        pause',
         '        exit /b 1',
