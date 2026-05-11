@@ -104,4 +104,14 @@ export class UsersController {
   ) {
     return this.usersService.resetUserPassword(id, dto.newPassword);
   }
+
+  @Patch(':id/empcode')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  setEmpcode(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('empcode') empcode: string,
+  ) {
+    return this.usersService.setEmpcode(id, empcode ?? '');
+  }
 }

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role } from '@prisma/client';
@@ -126,6 +127,37 @@ export class UsersService {
         empcode: true,
         role: true,
         isAssignable: true,
+      },
+    });
+  }
+
+  async setEmpcode(id: number, empcode: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const normalized = empcode ? String(empcode).replace(/^0+/, '').trim() : null;
+
+    if (normalized) {
+      const existing = await this.prisma.user.findFirst({
+        where: { empcode: normalized, NOT: { id } },
+        select: { id: true, name: true },
+      });
+      if (existing) {
+        throw new ConflictException(
+          `Employee code '${normalized}' is already assigned to another user`,
+        );
+      }
+    }
+
+    return this.prisma.user.update({
+      where: { id },
+      data: { empcode: normalized },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        empcode: true,
+        role: true,
       },
     });
   }
