@@ -56,6 +56,6 @@ describe('AuthController', () => {
     mockAuthService.getProfile.mockResolvedValue({ id: 1, name: 'Test' });
     const result = await controller.getProfile(1);
     expect(mockAuthService.getProfile).toHaveBeenCalledWith(1);
-    expect(result.name).toBe('Test');
+    expect(result!.name).toBe('Test');
   });
 });

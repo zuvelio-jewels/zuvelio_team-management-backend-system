@@ -20,12 +20,12 @@ export class AttendanceService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async getAll(userId: number) {
     const currentUser = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, empcode: true },
     });
 
     if (!currentUser) {
@@ -34,11 +34,7 @@ export class AttendanceService {
 
     const records = await this.fetchExternalAttendance();
     return records
-      .filter(
-        (record) =>
-          this.normalizeName(record.Name) ===
-          this.normalizeName(currentUser.name),
-      )
+      .filter((record) => this.matchesUser(record, currentUser))
       .map((record, index) => this.mapExternalRecord(record, index + 1));
   }
 
@@ -118,7 +114,7 @@ export class AttendanceService {
 
     const users = await this.prisma.user.findMany({
       where: userWhere,
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, empcode: true, role: true },
       orderBy: { name: 'asc' },
     });
 
@@ -128,11 +124,17 @@ export class AttendanceService {
 
     const externalRecords = await this.fetchExternalAttendance();
     const todayKey = this.formatExternalDate(new Date());
+    const latestByEmpcode = new Map<string, ExternalAttendanceItem>();
     const latestByName = new Map<string, ExternalAttendanceItem>();
 
     for (const record of externalRecords) {
       if (this.cleanDateString(record.DateString) !== todayKey) {
         continue;
+      }
+
+      const normalizedEmpcode = this.normalizeEmpcode(record.Empcode);
+      if (normalizedEmpcode && !latestByEmpcode.has(normalizedEmpcode)) {
+        latestByEmpcode.set(normalizedEmpcode, record);
       }
 
       const normalizedName = this.normalizeName(record.Name);
@@ -142,7 +144,10 @@ export class AttendanceService {
     }
 
     return users.map((user) => {
-      const record = latestByName.get(this.normalizeName(user.name));
+      const normalizedUserEmpcode = this.normalizeEmpcode(user.empcode);
+      const record = normalizedUserEmpcode
+        ? latestByEmpcode.get(normalizedUserEmpcode)
+        : latestByName.get(this.normalizeName(user.name));
       const normalized = record ? this.normalizePunchTimes(record) : null;
       const attendanceStatus = this.getAvailabilityStatus(record, normalized);
       const dateIso = record ? this.toIsoDateTime(record.DateString) : null;
@@ -290,8 +295,20 @@ export class AttendanceService {
     return 'AVAILABLE';
   }
 
-  private normalizeEmpcode(value: string) {
-    return String(value).replace(/^0+/, '').trim();
+  private normalizeEmpcode(value?: string | null) {
+    return String(value ?? '').replace(/^0+/, '').trim();
+  }
+
+  private matchesUser(
+    record: ExternalAttendanceItem,
+    user: { name: string; empcode?: string | null },
+  ) {
+    const userEmpcode = this.normalizeEmpcode(user.empcode ?? '');
+    if (userEmpcode) {
+      return this.normalizeEmpcode(record.Empcode) === userEmpcode;
+    }
+
+    return this.normalizeName(record.Name) === this.normalizeName(user.name);
   }
 
   private cleanDateString(value: string) {

@@ -963,16 +963,84 @@ export class ActivityService {
    */
   async getAdminEmployeeSummary(targetUserId: number, query: GetActivitySummaryDto) {
     const { startDate, endDate } = query;
-    return this.prisma.activitySummary.findMany({
+
+    const toIstDate = (date: Date) => {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(date);
+      const y = parts.find((p) => p.type === 'year')?.value ?? '0000';
+      const m = parts.find((p) => p.type === 'month')?.value ?? '01';
+      const d = parts.find((p) => p.type === 'day')?.value ?? '01';
+      return `${y}-${m}-${d}`;
+    };
+
+    // Build inclusive day range: gte = start-of-startDate, lt = start-of-day AFTER endDate
+    // Using lt (not lte) avoids the "midnight only" bug where lte: new Date("2026-05-09")
+    // equals exactly 00:00 UTC and therefore excludes all same-day rows stored at later hours.
+    const rangeStart = new Date(startDate);
+    const rangeEnd = new Date(endDate);
+    rangeEnd.setDate(rangeEnd.getDate() + 1); // exclusive upper bound (next day midnight)
+
+    const storedRows = await this.prisma.activitySummary.findMany({
       where: {
         userId: targetUserId,
         date: {
-          gte: new Date(startDate),
-          lte: new Date(endDate),
+          gte: rangeStart,
+          lt: rangeEnd,
         },
       },
       orderBy: [{ date: 'asc' }, { hour: 'asc' }],
     });
+
+    // If the requested range includes today, merge in live (not-yet-aggregated) data
+    // so the current incomplete hour is visible without waiting for the cron to run.
+    const todayStr = toIstDate(new Date());
+
+    if (startDate <= todayStr && endDate >= todayStr) {
+      const liveData = await this.getTodayActivityDashboard(targetUserId);
+      const liveSummaries = liveData.summaries.map((s: any) => ({
+        id: -1,
+        userId: targetUserId,
+        taskId: null as number | null,
+        date: new Date(),
+        hour: s.hour as number,
+        totalKeystrokes: s.totalKeystrokes as number,
+        totalClicks: s.totalClicks as number,
+        totalMouseMovement: s.totalMouseMovement as number,
+        idleTimeMinutes: s.idleTimeMinutes as number,
+        isWorkingHours: s.hour >= 10 && s.hour < 18,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      // Build a set of stored hours for today so we only add live rows that
+      // are not yet persisted (i.e., the current in-progress hour).
+      const storedTodayHours = new Set(
+        storedRows
+          .filter((r) => {
+            const rowDateStr = toIstDate(r.date);
+            return rowDateStr === todayStr;
+          })
+          .map((r) => r.hour),
+      );
+
+      for (const liveRow of liveSummaries) {
+        if (!storedTodayHours.has(liveRow.hour)) {
+          storedRows.push(liveRow as any);
+        }
+      }
+
+      // Re-sort after merge
+      storedRows.sort((a, b) => {
+        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        return dateCompare !== 0 ? dateCompare : a.hour - b.hour;
+      });
+    }
+
+    return storedRows;
   }
 
   async getAdminEmployeeList(adminRole: string) {

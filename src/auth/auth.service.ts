@@ -43,12 +43,26 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    const normalizedEmpcode = this.normalizeEmpcode(dto.empcode);
+
+    if (normalizedEmpcode) {
+      const existingEmpcode = await this.prisma.user.findFirst({
+        where: { empcode: normalizedEmpcode },
+        select: { id: true },
+      });
+
+      if (existingEmpcode) {
+        throw new ConflictException('Employee code already registered');
+      }
+    }
+
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
     const user = await this.prisma.user.create({
       data: {
         name: dto.name.trim(),
         email: dto.email.toLowerCase().trim(),
+        empcode: normalizedEmpcode,
         password: hashedPassword,
         isActive: false,
         isApproved: false,
@@ -57,6 +71,7 @@ export class AuthService {
         id: true,
         name: true,
         email: true,
+        empcode: true,
         role: true,
         createdAt: true,
       },
@@ -157,6 +172,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        empcode: user.empcode,
         role: user.role,
         profilePicture: user.profilePicture ?? null,
       },
@@ -341,6 +357,7 @@ export class AuthService {
         id: true,
         name: true,
         email: true,
+        empcode: true,
         role: true,
         isActive: true,
         profilePicture: true,
@@ -357,13 +374,33 @@ export class AuthService {
     if (existing) {
       throw new ConflictException('Email already in use by another account');
     }
+
+    const normalizedEmpcode = this.normalizeEmpcode(dto.empcode);
+    if (normalizedEmpcode) {
+      const existingEmpcode = await this.prisma.user.findFirst({
+        where: { empcode: normalizedEmpcode, NOT: { id: userId } },
+        select: { id: true },
+      });
+
+      if (existingEmpcode) {
+        throw new ConflictException(
+          'Employee code already in use by another account',
+        );
+      }
+    }
+
     const user = await this.prisma.user.update({
       where: { id: userId },
-      data: { name: dto.name.trim(), email: dto.email.toLowerCase().trim() },
+      data: {
+        name: dto.name.trim(),
+        email: dto.email.toLowerCase().trim(),
+        empcode: normalizedEmpcode,
+      },
       select: {
         id: true,
         name: true,
         email: true,
+        empcode: true,
         role: true,
         profilePicture: true,
       },
@@ -379,11 +416,21 @@ export class AuthService {
         id: true,
         name: true,
         email: true,
+        empcode: true,
         role: true,
         profilePicture: true,
       },
     });
     return user;
+  }
+
+  private normalizeEmpcode(value?: string | null) {
+    if (!value) {
+      return null;
+    }
+
+    const normalized = String(value).replace(/^0+/, '').trim();
+    return normalized || null;
   }
 
   private async generateTokens(userId: number, email: string, role: string) {
