@@ -158,7 +158,7 @@ export class ActivityController {
     // Priority: 1) Environment variable (easiest to update on Railway)
     //           2) version.json file if exists
     //           3) Default fallback
-    let version = process.env.AGENT_VERSION || '0.2.0';
+    let version = (process.env.AGENT_VERSION || '0.2.0').trim();
 
     // Try to read from version.json if available
     const versionPath = join(
@@ -200,7 +200,7 @@ export class ActivityController {
   @Get('agent/download-exe')
   async downloadAgentExePublic(@Res() res: Response) {
     // Option 1: Redirect to external URL if configured (Railway best practice)
-    const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL;
+    const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL?.trim();
     if (exeDownloadUrl) {
       return res.redirect(exeDownloadUrl);
     }
