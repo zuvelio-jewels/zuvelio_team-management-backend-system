@@ -206,18 +206,20 @@ export class ActivityController {
     }
 
     // Option 2: Serve locally if file exists
-    const agentPath = join(
-      process.cwd(),
-      '..',
-      'activity-monitor-agent',
-      'dist',
-      'zuvelio-activity-agent.exe',
-    );
+    // Try multiple possible locations
+    const possiblePaths = [
+      // Production: check current dist folder (Railway deployment)
+      join(process.cwd(), 'dist', 'zuvelio-activity-agent.exe'),
+      // Development: check sibling activity-monitor-agent folder
+      join(process.cwd(), '..', 'activity-monitor-agent', 'dist', 'zuvelio-activity-agent.exe'),
+    ];
 
-    if (!existsSync(agentPath)) {
+    const agentPath = possiblePaths.find((p) => existsSync(p));
+
+    if (!agentPath) {
       throw new NotFoundException(
-        'Desktop agent executable not found. ' +
-        'Set AGENT_DOWNLOAD_URL environment variable to redirect to the EXE location.',
+        'Desktop agent executable not found in dist folders. ' +
+        'Ensure EXE is in backend/dist/ or set AGENT_DOWNLOAD_URL environment variable.',
       );
     }
 
