@@ -106,7 +106,7 @@ function installStartup() {
             '    exit /b',
             ')',
             `cd /d "${envDir}"`,
-            `start "Zuvelio Activity Agent" "${exePath}"`,
+            `start "Zuvelio Activity Agent" /D "${envDir}" /MIN "${exePath}"`,
         ].join('\r\n') + '\r\n';
         fs.writeFileSync(shortcutPath, batContent, 'utf8');
         console.log(`Auto-start installed. Agent will launch on next Windows login.`);
