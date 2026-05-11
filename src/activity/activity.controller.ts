@@ -357,8 +357,10 @@ export class ActivityController {
       return res.send(buf);
     }
 
-    // 3. Last resort: generate ZIP on-the-fly (no src/index.js on Railway)
-    return this.sendUniversalSetupPackage(res, req);
+    // 3. Build proper exe-based installer ZIP on-the-fly.
+    //    sendSetupPackage will embed the local exe OR fall back to a BAT that
+    //    downloads it from AGENT_DOWNLOAD_URL (set in Railway env variables).
+    return this.sendSetupPackage(res, req, device.token, req.user.id);
   }
 
   // ─── Browser heartbeat ─────────────────────────────────────────────────────
