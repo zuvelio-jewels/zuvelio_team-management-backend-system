@@ -147,6 +147,66 @@ export class ActivityController {
     };
   }
 
+  /**
+   * GET /activity/agent/version  — PUBLIC, no auth required.
+   * Desktop agents call this on startup to check for updates.
+   * Returns { version, downloadUrl } so the agent can self-update.
+   */
+  @Public()
+  @Get('agent/version')
+  getAgentVersion(@Req() req, @Res() res: Response) {
+    // Read version from dist/version.json shipped alongside the EXE.
+    const versionPath = join(
+      process.cwd(),
+      '..',
+      'activity-monitor-agent',
+      'dist',
+      'version.json',
+    );
+
+    let version = '1.0.0';
+    if (existsSync(versionPath)) {
+      try {
+        const parsed = JSON.parse(readFileSync(versionPath, 'utf8'));
+        version = parsed.version || version;
+      } catch (_) { /* malformed — use default */ }
+    }
+
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const protocol = Array.isArray(forwardedProto)
+      ? forwardedProto[0]
+      : forwardedProto || req.protocol || 'https';
+    const baseUrl = process.env.ACTIVITY_AGENT_API_URL?.replace(/\/api$/, '')
+      || `${protocol}://${req.get('host')}`;
+
+    return res.json({
+      version,
+      downloadUrl: `${baseUrl}/api/activity/agent/download-exe`,
+    });
+  }
+
+  /**
+   * GET /activity/agent/download-exe — PUBLIC, no auth required.
+   * Agents download the latest EXE directly here during auto-update.
+   */
+  @Public()
+  @Get('agent/download-exe')
+  downloadAgentExePublic(@Res() res: Response) {
+    const agentPath = join(
+      process.cwd(),
+      '..',
+      'activity-monitor-agent',
+      'dist',
+      'zuvelio-activity-agent.exe',
+    );
+
+    if (!existsSync(agentPath)) {
+      throw new NotFoundException('Desktop agent executable not found on server');
+    }
+
+    return res.download(agentPath, 'zuvelio-activity-agent.exe');
+  }
+
   @Get('agent/download')
   downloadAgent(@Req() req, @Res() res: Response) {
     if (!['ADMIN', 'MANAGER'].includes(req.user.role)) {
@@ -401,6 +461,32 @@ export class ActivityController {
       targetId,
       enabled,
     );
+  }
+
+  // ─── Auto-Update Management ────────────────────────────────────────────────
+
+  /**
+   * POST /activity/admin/broadcast-update
+   * Notify all connected agents to check for a new version (admin only)
+   */
+  @Post('admin/broadcast-update')
+  async broadcastUpdate(
+    @Req() req,
+    @Body() dto: { version?: string; force?: boolean },
+  ) {
+    return this.activityService.broadcastUpdateNotification(req.user.role, {
+      version: dto.version || 'latest',
+      force: dto.force || false,
+    });
+  }
+
+  /**
+   * GET /activity/admin/agent-stats
+   * Get statistics about connected agents and their versions (admin only)
+   */
+  @Get('admin/agent-stats')
+  async getAgentStats(@Req() req) {
+    return this.activityService.getAgentStatistics(req.user.role);
   }
 
   private async sendSetupPackage(

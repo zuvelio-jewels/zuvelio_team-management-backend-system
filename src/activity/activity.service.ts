@@ -1124,4 +1124,74 @@ export class ActivityService {
       isMonitoringEnabled: enabled,
     };
   }
+
+  // ─── Auto-Update Management ────────────────────────────────────────────────
+
+  /**
+   * Broadcast update notification to all connected agents (admin only)
+   * Agents will check for updates within the next polling interval
+   */
+  async broadcastUpdateNotification(adminRole: string, versionInfo?: { version: string; force: boolean }) {
+    if (adminRole !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only admins can broadcast update notifications',
+      );
+    }
+
+    // In a real distributed system, you would:
+    // 1. Push notification to Redis pub/sub
+    // 2. WebSocket notification to connected agents
+    // 3. Database flag that agents read on next check
+
+    // For now, we log it for the backend to track
+    this.logger.log(
+      `Update broadcast requested: v${versionInfo?.version || 'latest'} (force=${versionInfo?.force || false})`,
+    );
+
+    return {
+      success: true,
+      message: 'Update notification queued. Agents will check within the next hour.',
+      version: versionInfo?.version || 'latest',
+    };
+  }
+
+  /**
+   * Get agent statistics for admin dashboard
+   */
+  async getAgentStatistics(adminRole: string) {
+    if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
+      throw new ForbiddenException(
+        'Only admins and managers can view agent statistics',
+      );
+    }
+
+    const devices = await this.prisma.deviceToken.findMany({
+      select: {
+        id: true,
+        userId: true,
+        deviceName: true,
+        createdAt: true,
+        lastUsedAt: true,
+        isRevoked: true,
+        user: {
+          select: { id: true, name: true, email: true, lastActivityAt: true },
+        },
+      },
+    });
+
+    const activeDevices = devices.filter((d) => !d.isRevoked);
+    const onlineDevices = activeDevices.filter((d) => {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      return d.user.lastActivityAt && d.user.lastActivityAt > fiveMinutesAgo;
+    });
+
+    return {
+      totalDevices: devices.length,
+      activeDevices: activeDevices.length,
+      onlineDevices: onlineDevices.length,
+      offlineDevices: activeDevices.length - onlineDevices.length,
+      revokedDevices: devices.filter((d) => d.isRevoked).length,
+      devices: activeDevices,
+    };
+  }
 }
