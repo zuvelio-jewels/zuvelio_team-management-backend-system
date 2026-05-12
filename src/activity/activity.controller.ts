@@ -199,18 +199,34 @@ export class ActivityController {
   @Public()
   @Get('agent/download-exe')
   async downloadAgentExePublic(@Res() res: Response) {
-    // Option 1: Redirect to external URL if configured (Railway best practice)
+    // Option 1: PROXY download from external URL (DO NOT redirect — redirects fail
+    // when GitHub requires multiple hops or the repo is private, resulting in a
+    // tiny HTML/redirect file saved on the employee's PC instead of the real EXE).
     const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL?.trim();
     if (exeDownloadUrl) {
-      return res.redirect(exeDownloadUrl);
+      try {
+        const upstream = await fetch(exeDownloadUrl, {
+          headers: { 'User-Agent': 'ZuvelioBackend/1.0' },
+          redirect: 'follow',
+        });
+        if (upstream.ok) {
+          res.setHeader('Content-Type', 'application/octet-stream');
+          res.setHeader('Content-Disposition', 'attachment; filename="zuvelio-activity-agent.exe"');
+          const contentLength = upstream.headers.get('content-length');
+          if (contentLength) res.setHeader('Content-Length', contentLength);
+          // Pipe the upstream body directly to the response
+          (upstream.body as any).pipe(res);
+          return;
+        }
+        console.warn(`[download-exe] AGENT_DOWNLOAD_URL returned ${upstream.status}, falling back to local file.`);
+      } catch (err) {
+        console.warn(`[download-exe] AGENT_DOWNLOAD_URL fetch failed: ${(err as Error).message}, falling back to local file.`);
+      }
     }
 
     // Option 2: Serve locally if file exists
-    // Try multiple possible locations
     const possiblePaths = [
-      // Production: check current dist folder (Railway deployment)
       join(process.cwd(), 'dist', 'zuvelio-activity-agent.exe'),
-      // Development: check sibling activity-monitor-agent folder
       join(process.cwd(), '..', 'activity-monitor-agent', 'dist', 'zuvelio-activity-agent.exe'),
     ];
 
@@ -218,8 +234,8 @@ export class ActivityController {
 
     if (!agentPath) {
       throw new NotFoundException(
-        'Desktop agent executable not found in dist folders. ' +
-        'Ensure EXE is in backend/dist/ or set AGENT_DOWNLOAD_URL environment variable.',
+        'Desktop agent executable not found. ' +
+        'Set AGENT_DOWNLOAD_URL environment variable on Railway.',
       );
     }
 
@@ -616,6 +632,17 @@ export class ActivityController {
         '    if !DL_OK!==0 (',
         '        powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$wc=New-Object System.Net.WebClient;$wc.Headers[\'User-Agent\']=\'Mozilla/5.0\';$wc.DownloadFile($env:DL_URL,\'%~dp0zuvelio-activity-agent.exe\');Write-Host \'OK\'}catch{Write-Host $_;exit 1}"',
         '        if !errorlevel! equ 0 set DL_OK=1',
+        '    )',
+        '',
+        '    :: Validate downloaded file is a real EXE (must be > 5 MB)',
+        '    if !DL_OK!==0 (',
+        '        for %%F in ("%~dp0zuvelio-activity-agent.exe") do set EXE_SIZE=%%~zF',
+        '        if !EXE_SIZE! LSS 5000000 (',
+        '            echo.',
+        '            echo ERROR: Downloaded file is too small (!EXE_SIZE! bytes^) - download was corrupted.',
+        '            del /F /Q "%~dp0zuvelio-activity-agent.exe" >nul 2>&1',
+        '            set DL_OK=0',
+        '        )',
         '    )',
         '',
         '    if !DL_OK!==0 (',
