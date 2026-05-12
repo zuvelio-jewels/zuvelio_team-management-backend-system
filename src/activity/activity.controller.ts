@@ -344,8 +344,8 @@ export class ActivityController {
     };
 
     // 1. Railway / production: if a pre-built ZIP URL is configured, proxy it
-    //    Set AGENT_SETUP_ZIP_URL in Railway env to your GitHub release download URL.
-    const setupZipUrl = process.env.AGENT_SETUP_ZIP_URL;
+    //    Set AGENT_SETUP_ZIP_URL (or legacy AGENT_EXE_URL) in Railway env to your GitHub release download URL.
+    const setupZipUrl = process.env.AGENT_SETUP_ZIP_URL || process.env.AGENT_EXE_URL;
     if (setupZipUrl) {
       const r = await fetch(setupZipUrl);
       if (r.ok) {
