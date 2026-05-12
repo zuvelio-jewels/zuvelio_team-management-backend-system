@@ -598,11 +598,19 @@ export class ActivityController {
         zip.file('INSTALL_OFFICE_TRACKING.bat', await batRes.text());
       }
     } else {
-      // INSTALL_OFFICE_TRACKING.bat — no UAC here; elevation handled by EMPLOYEE_SETUP.bat
+      // INSTALL_OFFICE_TRACKING.bat — includes UAC auto-elevation so it works when double-clicked
       const fallbackInstaller = [
         '@echo off',
         'setlocal EnableDelayedExpansion',
         'title Zuvelio Activity Agent — Installer',
+        '',
+        ':: Auto-elevate to Administrator (required to write to Program Files)',
+        'net session >nul 2>&1',
+        'if !errorlevel! neq 0 (',
+        '    echo Requesting Administrator permission...',
+        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -WorkingDirectory (Split-Path -Parent \'%~f0\') -Verb RunAs -WindowStyle Normal"',
+        '    exit /b',
+        ')',
         '',
         'echo ============================================',
         'echo  Zuvelio Activity Agent Installer',
