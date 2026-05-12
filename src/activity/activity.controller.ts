@@ -202,7 +202,9 @@ export class ActivityController {
     // Option 1: PROXY download from external URL (DO NOT redirect — redirects fail
     // when GitHub requires multiple hops or the repo is private, resulting in a
     // tiny HTML/redirect file saved on the employee's PC instead of the real EXE).
-    const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL?.trim();
+    // Normalize URL: GitHub release tag is '0.3.0' (no 'v') — strip 'v' from /download/vX.Y.Z/ if present
+    const exeDownloadUrl = process.env.AGENT_DOWNLOAD_URL?.trim()
+      ?.replace(/\/releases\/download\/v(\d)/, '/releases/download/$1');
     if (exeDownloadUrl) {
       try {
         const upstream = await fetch(exeDownloadUrl, {
@@ -621,7 +623,7 @@ export class ActivityController {
         'if !EXE_FOUND!==0 (',
         '    echo Downloading agent... please wait (38 MB)...',
         // Download directly from CDN/GitHub — NOT through Railway (Railway times out proxying 38MB)
-        `    set "DL_URL=${process.env.AGENT_DOWNLOAD_URL?.trim() || `${apiUrl}/activity/agent/download-exe`}"`,
+        `    set "DL_URL=${(process.env.AGENT_DOWNLOAD_URL?.trim() || '').replace(/\/releases\/download\/v(\d)/, '/releases/download/$1') || `${apiUrl}/activity/agent/download-exe`}"`,
         '    set DL_OK=0',
         '',
         '    where curl.exe >nul 2>&1',
