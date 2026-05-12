@@ -153,6 +153,10 @@ model ActivityEvent {
   // Task correlation (optional)
   taskId            Int?
   
+  // Active application/tool at the time of the event (set by the desktop agent)
+  // Format: "Window Title|ProcessName"
+  activeWindow      String?
+  
   // Metadata
   sessionId         String?   // To group events by browser session
   

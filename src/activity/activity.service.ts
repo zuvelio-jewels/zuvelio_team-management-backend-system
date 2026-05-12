@@ -24,6 +24,7 @@ export class ActivityService {
       clickType?: string;
       taskId?: number;
       sessionId?: string;
+      activeWindow?: string;
       timestamp: Date;
     }>
   > = new Map();
@@ -145,6 +146,7 @@ export class ActivityService {
         clickType: activityEvent.clickType,
         taskId: activityEvent.taskId,
         sessionId: activityEvent.sessionId,
+        activeWindow: activityEvent.activeWindow,
         timestamp: eventTimestamp,
       });
     }
@@ -247,6 +249,7 @@ export class ActivityService {
             clickType: event.clickType,
             taskId: event.taskId,
             sessionId: event.sessionId,
+            activeWindow: event.activeWindow,
             timestamp: event.timestamp,
           })),
           skipDuplicates: false,
@@ -398,6 +401,7 @@ export class ActivityService {
         select: {
           eventType: true,
           timestamp: true,
+          activeWindow: true,
         },
         orderBy: { timestamp: 'asc' },
       });
@@ -410,10 +414,12 @@ export class ActivityService {
         ...todayEvents.map((event) => ({
           eventType: event.eventType,
           timestamp: event.timestamp,
+          activeWindow: event.activeWindow ?? undefined,
         })),
         ...bufferedEvents.map((event) => ({
           eventType: event.eventType,
           timestamp: event.timestamp,
+          activeWindow: event.activeWindow,
         })),
       ];
 
@@ -432,6 +438,8 @@ export class ActivityService {
         totalClicks: 0,
         totalMouseMovement: 0,
         idleTimeMinutes: 0,
+        // activeWindow frequency map — collapsed to topApps[] before returning
+        _appFreq: new Map<string, number>(),
       }));
 
       for (const event of allTodayEvents) {
@@ -452,6 +460,18 @@ export class ActivityService {
 
         if (event.eventType === 'MOUSE_MOVE') {
           bucket.totalMouseMovement += 1;
+        }
+
+        // Track active app frequency (use only the process name part after '|'
+        // for a compact display; fall back to the full string when no pipe present)
+        if (event.activeWindow) {
+          const pipIdx = event.activeWindow.indexOf('|');
+          const appKey = pipIdx >= 0
+            ? event.activeWindow.slice(pipIdx + 1).trim()
+            : event.activeWindow.trim();
+          if (appKey) {
+            bucket._appFreq.set(appKey, (bucket._appFreq.get(appKey) ?? 0) + 1);
+          }
         }
       }
 
@@ -504,13 +524,22 @@ export class ActivityService {
         summary.idleTimeMinutes = Math.max(0, Math.round(summary.idleTimeMinutes));
       }
 
-      const todaySummaries = hourlySummaries.filter(
-        (summary) =>
-          summary.totalKeystrokes > 0 ||
-          summary.totalClicks > 0 ||
-          summary.totalMouseMovement > 0 ||
-          summary.idleTimeMinutes > 0,
-      );
+      // Resolve top apps per hour (top 3 by event count, strip internal _appFreq)
+      const todaySummaries = hourlySummaries
+        .filter(
+          (summary) =>
+            summary.totalKeystrokes > 0 ||
+            summary.totalClicks > 0 ||
+            summary.totalMouseMovement > 0 ||
+            summary.idleTimeMinutes > 0,
+        )
+        .map(({ _appFreq, ...rest }) => ({
+          ...rest,
+          topApps: [..._appFreq.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 3)
+            .map(([name]) => name),
+        }));
 
       // Compute the true tracked window: from the very first event today to now.
       // This avoids the "summaries.length × 60" overcounting when the first

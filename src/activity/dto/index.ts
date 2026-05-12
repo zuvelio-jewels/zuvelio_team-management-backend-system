@@ -47,6 +47,15 @@ export class CreateActivityEventDto {
   @IsOptional()
   @IsDateString()
   timestamp?: string;
+
+  /**
+   * Active window title and process name at the time the event occurred.
+   * Format: "Window Title|ProcessName"  (set by the desktop agent)
+   * e.g. "README.md - Visual Studio Code|Code"
+   */
+  @IsOptional()
+  @IsString()
+  activeWindow?: string;
 }
 
 export class CreateActivityBatchDto {
