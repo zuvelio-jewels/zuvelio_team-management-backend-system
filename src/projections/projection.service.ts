@@ -144,23 +144,20 @@ export class ProjectionService {
         return updated;
     }
 
-    // Cancel projection
-    async cancel(id: number, adminId: number) {
+    // Delete projection from admin dashboard
+    async cancel(id: number, actorId: number, actorRole?: string) {
         const projection = await this.findOne(id);
 
-        if (projection.createdByAdminId !== adminId) {
+        const canManageAny = actorRole === 'ADMIN' || actorRole === 'MANAGER';
+        if (!canManageAny && projection.createdByAdminId !== actorId) {
             throw new ForbiddenException(
-                'You can only cancel projections you created',
+                'You can only delete projections you created',
             );
         }
 
-        if (projection.status === 'COMPLETED') {
-            throw new BadRequestException('Cannot cancel a completed projection');
-        }
-
-        return this.prisma.projection.update({
+        // Hard delete the projection (related logs/actions/notifications cascade via Prisma schema).
+        return this.prisma.projection.delete({
             where: { id },
-            data: { status: 'REJECTED' },
         });
     }
 

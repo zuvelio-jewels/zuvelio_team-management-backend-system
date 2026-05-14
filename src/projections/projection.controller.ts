@@ -49,7 +49,7 @@ export class ProjectionController {
 
     // Get admin dashboard
     @Get('admin/dashboard')
-    @Roles('ADMIN')
+    @Roles('ADMIN', 'MANAGER')
     getAdminDashboard(@Request() req) {
         return this.projectionService.getAdminDashboard(req.user.id);
     }
@@ -90,7 +90,7 @@ export class ProjectionController {
 
     // Update projection (Admin only)
     @Patch(':id')
-    @Roles('ADMIN')
+    @Roles('ADMIN', 'MANAGER')
     update(
         @Param('id', ParseIntPipe) id: number,
         @Body() updateProjectionDto: UpdateProjectionDto,
@@ -101,9 +101,9 @@ export class ProjectionController {
 
     // Cancel projection (Admin only)
     @Delete(':id')
-    @Roles('ADMIN')
+    @Roles('ADMIN', 'MANAGER')
     cancel(@Param('id', ParseIntPipe) id: number, @Request() req) {
-        return this.projectionService.cancel(id, req.user.id);
+        return this.projectionService.cancel(id, req.user.id, req.user.role);
     }
 
     // Handle employee action on projection
