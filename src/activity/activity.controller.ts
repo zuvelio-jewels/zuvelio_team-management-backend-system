@@ -577,13 +577,24 @@ export class ActivityController {
 
     const zip = new JSZip();
 
-    // ── Agent executable: local file only ──────────────────────────────
-    // NOTE: We intentionally do NOT download the exe from AGENT_EXE_URL
-    // through the server — that causes a 35–40 MB ZIP which times out on
-    // Railway before it reaches the browser. Instead the installer BAT
-    // downloads the exe directly from GitHub on the employee's machine.
+    // ── Agent executable: local file OR download from AGENT_DOWNLOAD_URL ──
+    // On Railway the local exe is never present, so we download it server-side
+    // from AGENT_DOWNLOAD_URL and embed it directly into the ZIP.
     if (exePath) {
       zip.file('zuvelio-activity-agent.exe', readFileSync(exePath));
+    } else if (process.env.AGENT_DOWNLOAD_URL?.trim()) {
+      try {
+        const exeRes = await fetch(process.env.AGENT_DOWNLOAD_URL.trim(), {
+          headers: { 'User-Agent': 'ZuvelioBackend/1.0' },
+          redirect: 'follow',
+        });
+        if (exeRes.ok) {
+          const exeBuf = Buffer.from(await exeRes.arrayBuffer());
+          if (exeBuf.length > 5_000_000) {
+            zip.file('zuvelio-activity-agent.exe', exeBuf);
+          }
+        }
+      } catch (_) { /* network error — skip exe, BAT will download it */ }
     }
 
     // ── Installer script: local file → env URL → generated fallback ────────

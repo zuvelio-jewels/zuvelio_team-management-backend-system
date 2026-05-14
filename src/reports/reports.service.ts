@@ -25,6 +25,7 @@ export interface UserReportStats {
     deadline: Date | null;
     updatedBy: Date | null;
     completeBy: string;
+    assignedByName: string | null;
   }[];
 }
 
@@ -77,7 +78,10 @@ export class ReportsService {
 
     const tasks = await this.prisma.task.findMany({
       where,
-      include: { assignedTo: { select: { id: true, name: true } } },
+      include: {
+        assignedTo: { select: { id: true, name: true } },
+        allottedFrom: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -91,12 +95,12 @@ export class ReportsService {
     return this.computeStats(userId, user?.name ?? 'Unknown', tasks);
   }
 
-  /** Report for all users (admin view) */
+  /** Report for all users (admin view) — only shows task receivers (isAssignable employees) */
   async getAllUsersReport(
     from?: string,
     to?: string,
   ): Promise<UserReportStats[]> {
-    const where: any = {};
+    const where: any = { assignedTo: { isAssignable: true } };
     if (from || to) {
       where.createdAt = {};
       if (from) where.createdAt.gte = new Date(from);
@@ -109,7 +113,10 @@ export class ReportsService {
 
     const tasks = await this.prisma.task.findMany({
       where,
-      include: { assignedTo: { select: { id: true, name: true } } },
+      include: {
+        assignedTo: { select: { id: true, name: true } },
+        allottedFrom: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -186,6 +193,7 @@ export class ReportsService {
         deadline: t.deadline,
         updatedBy: t.updatedBy,
         completeBy: t.completeBy,
+        assignedByName: t.allottedFrom?.name ?? null,
       })),
     };
   }
