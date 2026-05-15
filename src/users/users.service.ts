@@ -103,6 +103,27 @@ export class UsersService {
     });
   }
 
+  async setRole(id: number, role: Role) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id },
+      data: { role },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        empcode: true,
+        cabinNo: true,
+        profilePicture: true,
+        role: true,
+        isAssignable: true,
+        isProjectAssignable: true,
+        isApproved: true,
+      },
+    });
+  }
+
   async setCabinNo(id: number, cabinNo: string) {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');

@@ -115,6 +115,16 @@ export class UsersController {
     return this.usersService.setEmpcode(id, empcode ?? '');
   }
 
+  @Patch(':id/role')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  setRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('role') role: Role,
+  ) {
+    return this.usersService.setRole(id, role);
+  }
+
   @Patch(':id/cabin-no')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER)
