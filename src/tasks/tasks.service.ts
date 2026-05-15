@@ -6,7 +6,12 @@ import { CreateTaskDto, UpdateTaskDto } from './dto';
 export class TasksService {
   constructor(private prisma: PrismaService) {}
 
-  private computeDeadline(completeBy: string, createdAt: Date): Date {
+  private computeDeadline(completeBy: string, createdAt: Date, customDeadline?: string): Date {
+    if (completeBy === 'CUSTOM' && customDeadline) {
+      const d = new Date(customDeadline);
+      d.setHours(23, 59, 59, 999);
+      return d;
+    }
     const deadline = new Date(createdAt);
     switch (completeBy) {
       case 'TODAY':
@@ -63,7 +68,7 @@ export class TasksService {
 
   async create(dto: CreateTaskDto, allottedFromId: number) {
     const now = new Date();
-    const deadline = this.computeDeadline(dto.completeBy, now);
+    const deadline = this.computeDeadline(dto.completeBy, now, dto.customDeadline);
 
     const task = await this.prisma.task.create({
       data: {

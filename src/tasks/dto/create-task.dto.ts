@@ -10,12 +10,16 @@ export class CreateTaskDto {
   cabin: string;
 
   @IsString()
-  @IsNotEmpty()
-  taskDetail: string;
+  @IsOptional()
+  taskDetail?: string;
 
   @IsString()
-  @IsIn(['TODAY', 'TOMORROW', 'WITHIN_3_DAYS', 'WITHIN_7_DAYS'])
+  @IsIn(['TODAY', 'TOMORROW', 'WITHIN_3_DAYS', 'WITHIN_7_DAYS', 'CUSTOM'])
   completeBy: string;
+
+  @IsOptional()
+  @IsString()
+  customDeadline?: string;
 
   @IsInt()
   assignedToId: number;
