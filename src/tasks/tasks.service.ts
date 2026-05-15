@@ -74,7 +74,7 @@ export class TasksService {
       data: {
         title: dto.title,
         cabin: dto.cabin,
-        taskDetail: dto.taskDetail,
+        taskDetail: dto.taskDetail ?? '',
         completeBy: dto.completeBy,
         deadline,
         note: dto.note,
