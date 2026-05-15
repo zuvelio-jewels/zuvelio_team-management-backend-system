@@ -19,7 +19,6 @@ import { Role } from '@prisma/client';
 
 @Controller('teams')
 @UseGuards(RolesGuard)
-@Roles(Role.ADMIN, Role.MANAGER)
 export class TeamsController {
   constructor(private readonly teamsService: TeamsService) {}
 
@@ -53,6 +52,7 @@ export class TeamsController {
   }
 
   @Post(':id/members/:userId')
+  @Roles(Role.ADMIN, Role.MANAGER)
   addMember(
     @Param('id', ParseIntPipe) id: number,
     @Param('userId', ParseIntPipe) userId: number,
@@ -61,6 +61,7 @@ export class TeamsController {
   }
 
   @Delete(':id/members/:userId')
+  @Roles(Role.ADMIN, Role.MANAGER)
   @HttpCode(200)
   removeMember(
     @Param('id', ParseIntPipe) id: number,
