@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsInt,
-  IsOptional,
-  Min,
-  IsIn,
-} from 'class-validator';
+import { IsString, IsInt, IsOptional, Min, IsIn } from 'class-validator';
 
 export class UpdateProjectionDto {
   @IsString()
@@ -22,6 +16,13 @@ export class UpdateProjectionDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'COMPLETED', 'REJECTED', 'INCOMPLETE'])
+  @IsIn([
+    'PENDING',
+    'ACCEPTED',
+    'IN_PROGRESS',
+    'COMPLETED',
+    'REJECTED',
+    'INCOMPLETE',
+  ])
   status?: string;
 }

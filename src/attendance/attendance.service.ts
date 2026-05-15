@@ -20,7 +20,7 @@ export class AttendanceService {
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
-  ) { }
+  ) {}
 
   async getAll(userId: number) {
     const currentUser = await this.prisma.user.findUnique({
@@ -296,7 +296,9 @@ export class AttendanceService {
   }
 
   private normalizeEmpcode(value?: string | null) {
-    return String(value ?? '').replace(/^0+/, '').trim();
+    return String(value ?? '')
+      .replace(/^0+/, '')
+      .trim();
   }
 
   private matchesUser(

@@ -33,7 +33,7 @@ import { Public } from '../auth/decorators/public.decorator';
 @Controller('activity')
 @UseGuards(JwtAuthGuard)
 export class ActivityController {
-  constructor(private activityService: ActivityService) { }
+  constructor(private activityService: ActivityService) {}
 
   private getAgentRoot() {
     return join(process.cwd(), '..', 'activity-monitor-agent');
@@ -172,15 +172,18 @@ export class ActivityController {
       try {
         const parsed = JSON.parse(readFileSync(versionPath, 'utf8'));
         version = parsed.version || version;
-      } catch (_) { /* malformed — use default */ }
+      } catch (_) {
+        /* malformed — use default */
+      }
     }
 
     const forwardedProto = req.headers['x-forwarded-proto'];
     const protocol = Array.isArray(forwardedProto)
       ? forwardedProto[0]
       : forwardedProto || req.protocol || 'https';
-    const baseUrl = process.env.ACTIVITY_AGENT_API_URL?.replace(/\/api$/, '')
-      || `${protocol}://${req.get('host')}`;
+    const baseUrl =
+      process.env.ACTIVITY_AGENT_API_URL?.replace(/\/api$/, '') ||
+      `${protocol}://${req.get('host')}`;
 
     return res.json({
       version,
@@ -191,7 +194,7 @@ export class ActivityController {
   /**
    * GET /activity/agent/download-exe — PUBLIC, no auth required.
    * Agents download the latest EXE directly here during auto-update.
-   * 
+   *
    * Priority:
    * 1. AGENT_DOWNLOAD_URL environment variable (for Railway/production)
    * 2. Local file if exists
@@ -211,23 +214,36 @@ export class ActivityController {
         });
         if (upstream.ok) {
           res.setHeader('Content-Type', 'application/octet-stream');
-          res.setHeader('Content-Disposition', 'attachment; filename="zuvelio-activity-agent.exe"');
+          res.setHeader(
+            'Content-Disposition',
+            'attachment; filename="zuvelio-activity-agent.exe"',
+          );
           const contentLength = upstream.headers.get('content-length');
           if (contentLength) res.setHeader('Content-Length', contentLength);
           // Pipe the upstream body directly to the response
           (upstream.body as any).pipe(res);
           return;
         }
-        console.warn(`[download-exe] AGENT_DOWNLOAD_URL returned ${upstream.status}, falling back to local file.`);
+        console.warn(
+          `[download-exe] AGENT_DOWNLOAD_URL returned ${upstream.status}, falling back to local file.`,
+        );
       } catch (err) {
-        console.warn(`[download-exe] AGENT_DOWNLOAD_URL fetch failed: ${(err as Error).message}, falling back to local file.`);
+        console.warn(
+          `[download-exe] AGENT_DOWNLOAD_URL fetch failed: ${(err as Error).message}, falling back to local file.`,
+        );
       }
     }
 
     // Option 2: Serve locally if file exists
     const possiblePaths = [
       join(process.cwd(), 'dist', 'zuvelio-activity-agent.exe'),
-      join(process.cwd(), '..', 'activity-monitor-agent', 'dist', 'zuvelio-activity-agent.exe'),
+      join(
+        process.cwd(),
+        '..',
+        'activity-monitor-agent',
+        'dist',
+        'zuvelio-activity-agent.exe',
+      ),
     ];
 
     const agentPath = possiblePaths.find((p) => existsSync(p));
@@ -235,7 +251,7 @@ export class ActivityController {
     if (!agentPath) {
       throw new NotFoundException(
         'Desktop agent executable not found. ' +
-        'Set AGENT_DOWNLOAD_URL environment variable on Railway.',
+          'Set AGENT_DOWNLOAD_URL environment variable on Railway.',
       );
     }
 
@@ -317,8 +333,12 @@ export class ActivityController {
   ) {
     // Build API URL for embedding in .env
     const forwardedProto = req.headers['x-forwarded-proto'];
-    const protocol = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto || req.protocol || 'https';
-    const apiUrl = process.env.ACTIVITY_AGENT_API_URL || `${protocol}://${req.get('host')}/api`;
+    const protocol = Array.isArray(forwardedProto)
+      ? forwardedProto[0]
+      : forwardedProto || req.protocol || 'https';
+    const apiUrl =
+      process.env.ACTIVITY_AGENT_API_URL ||
+      `${protocol}://${req.get('host')}/api`;
 
     // Create a device token for the logged-in user
     const device = await this.activityService.registerSelfDevice(
@@ -345,13 +365,17 @@ export class ActivityController {
 
     // 1. Railway / production: if a pre-built ZIP URL is configured, proxy it
     //    Set AGENT_SETUP_ZIP_URL (or legacy AGENT_EXE_URL) in Railway env to your GitHub release download URL.
-    const setupZipUrl = process.env.AGENT_SETUP_ZIP_URL || process.env.AGENT_EXE_URL;
+    const setupZipUrl =
+      process.env.AGENT_SETUP_ZIP_URL || process.env.AGENT_EXE_URL;
     if (setupZipUrl) {
       const r = await fetch(setupZipUrl);
       if (r.ok) {
         const buf = await injectEnv(Buffer.from(await r.arrayBuffer()));
         res.setHeader('Content-Type', 'application/zip');
-        res.setHeader('Content-Disposition', 'attachment; filename="ZuvelioSetup.zip"');
+        res.setHeader(
+          'Content-Disposition',
+          'attachment; filename="ZuvelioSetup.zip"',
+        );
         return res.send(buf);
       }
     }
@@ -459,7 +483,10 @@ export class ActivityController {
     @Req() req,
     @Param('id', ParseIntPipe) targetId: number,
   ) {
-    return this.activityService.getAdminEmployeeProfile(req.user.role, targetId);
+    return this.activityService.getAdminEmployeeProfile(
+      req.user.role,
+      targetId,
+    );
   }
 
   /** GET /activity/admin/employees/:id/dashboard — today's dashboard for any employee */
@@ -554,7 +581,9 @@ export class ActivityController {
       join(agentRoot, 'EMPLOYEE_SETUP.bat'),
     ]);
 
-    const readmePath = this.pickExistingPath([join(agentRoot, 'README_USER.txt')]);
+    const readmePath = this.pickExistingPath([
+      join(agentRoot, 'README_USER.txt'),
+    ]);
 
     const forwardedProto = req.headers['x-forwarded-proto'];
     const protocol = Array.isArray(forwardedProto)
@@ -594,7 +623,9 @@ export class ActivityController {
             zip.file('zuvelio-activity-agent.exe', exeBuf);
           }
         }
-      } catch (_) { /* network error — skip exe, BAT will download it */ }
+      } catch (_) {
+        /* network error — skip exe, BAT will download it */
+      }
     }
 
     // ── Installer script: local file → env URL → generated fallback ────────
@@ -619,7 +650,7 @@ export class ActivityController {
         'net session >nul 2>&1',
         'if !errorlevel! neq 0 (',
         '    echo Requesting Administrator permission...',
-        '    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath \'%~f0\' -WorkingDirectory (Split-Path -Parent \'%~f0\') -Verb RunAs -WindowStyle Normal"',
+        "    powershell -NoProfile -ExecutionPolicy Bypass -Command \"Start-Process -FilePath '%~f0' -WorkingDirectory (Split-Path -Parent '%~f0') -Verb RunAs -WindowStyle Normal\"",
         '    exit /b',
         ')',
         '',
@@ -650,7 +681,7 @@ export class ActivityController {
         '    )',
         '',
         '    if !DL_OK!==0 (',
-        '        powershell -NoProfile -ExecutionPolicy Bypass -Command "try{$wc=New-Object System.Net.WebClient;$wc.Headers[\'User-Agent\']=\'Mozilla/5.0\';$wc.DownloadFile(\'!DL_URL!\',\'%~dp0zuvelio-activity-agent.exe\');Write-Host \'OK\'}catch{Write-Host $_;exit 1}"',
+        "        powershell -NoProfile -ExecutionPolicy Bypass -Command \"try{$wc=New-Object System.Net.WebClient;$wc.Headers['User-Agent']='Mozilla/5.0';$wc.DownloadFile('!DL_URL!','%~dp0zuvelio-activity-agent.exe');Write-Host 'OK'}catch{Write-Host $_;exit 1}\"",
         '        if !errorlevel! equ 0 set DL_OK=1',
         '    )',
         '',
@@ -971,16 +1002,20 @@ export class ActivityController {
       zip.file('package.json', readFileSync(localPkgJson, 'utf8'));
     } else {
       // Minimal package.json — just enough for npm install
-      const pkgJson = JSON.stringify({
-        name: 'zuvelio-activity-agent',
-        version: '1.0.0',
-        main: 'src/index.js',
-        dependencies: {
-          'dotenv': '^16.0.0',
-          'node-fetch': '^2.7.0',
-          'uiohook-napi': '^1.5.4',
+      const pkgJson = JSON.stringify(
+        {
+          name: 'zuvelio-activity-agent',
+          version: '1.0.0',
+          main: 'src/index.js',
+          dependencies: {
+            dotenv: '^16.0.0',
+            'node-fetch': '^2.7.0',
+            'uiohook-napi': '^1.5.4',
+          },
         },
-      }, null, 2);
+        null,
+        2,
+      );
       zip.file('package.json', pkgJson);
     }
 
@@ -990,7 +1025,7 @@ export class ActivityController {
       'net session >nul 2>&1',
       'if %errorLevel% neq 0 (',
       '    echo Requesting Administrator permission...',
-      '    powershell -NoProfile -Command "Start-Process \'%~f0\' -Verb RunAs -WorkingDirectory \'%~dp0\'"',
+      "    powershell -NoProfile -Command \"Start-Process '%~f0' -Verb RunAs -WorkingDirectory '%~dp0'\"",
       '    exit /b',
       ')',
       'cd /d "%~dp0"',
@@ -1032,7 +1067,10 @@ export class ActivityController {
 
     const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
     res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', 'attachment; filename="ZuvelioSetup.zip"');
+    res.setHeader(
+      'Content-Disposition',
+      'attachment; filename="ZuvelioSetup.zip"',
+    );
     return res.send(zipBuffer);
   }
 

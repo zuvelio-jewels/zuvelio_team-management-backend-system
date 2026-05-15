@@ -1,10 +1,4 @@
-import {
-  IsString,
-  IsInt,
-  IsNotEmpty,
-  IsOptional,
-  Min,
-} from 'class-validator';
+import { IsString, IsInt, IsNotEmpty, IsOptional, Min } from 'class-validator';
 
 export class CreateProjectionDto {
   @IsString()

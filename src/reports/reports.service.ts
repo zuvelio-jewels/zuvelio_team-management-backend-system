@@ -31,7 +31,7 @@ export interface UserReportStats {
 
 @Injectable()
 export class ReportsService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   private computeAlert(task: {
     personStatus: string;

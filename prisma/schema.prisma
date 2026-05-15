@@ -24,6 +24,7 @@ model User {
   failedLoginAttempts    Int       @default(0)
   lockedUntil            DateTime?
   profilePicture         String?
+  cabinNo                String?
 
   assignedTasks      Task[]         @relation("AssignedTo")
   allottedTasks      Task[]         @relation("AllottedFrom")

@@ -10,7 +10,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -20,6 +20,8 @@ export class UsersService {
         name: true,
         email: true,
         empcode: true,
+        cabinNo: true,
+        profilePicture: true,
         role: true,
         isAssignable: true,
         isProjectAssignable: true,
@@ -43,6 +45,8 @@ export class UsersService {
         name: true,
         email: true,
         empcode: true,
+        cabinNo: true,
+        profilePicture: true,
         role: true,
         createdAt: true,
         isActive: true, // Include this to show which are legacy vs new
@@ -89,10 +93,32 @@ export class UsersService {
         name: true,
         email: true,
         empcode: true,
+        cabinNo: true,
+        profilePicture: true,
         role: true,
         isAssignable: true,
         isProjectAssignable: true,
         isApproved: true,
+      },
+    });
+  }
+
+  async setCabinNo(id: number, cabinNo: string) {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) throw new NotFoundException('User not found');
+
+    const normalized = cabinNo ? cabinNo.trim() : null;
+
+    return this.prisma.user.update({
+      where: { id },
+      data: { cabinNo: normalized },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        empcode: true,
+        cabinNo: true,
+        role: true,
       },
     });
   }
@@ -135,7 +161,9 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
 
-    const normalized = empcode ? String(empcode).replace(/^0+/, '').trim() : null;
+    const normalized = empcode
+      ? String(empcode).replace(/^0+/, '').trim()
+      : null;
 
     if (normalized) {
       const existing = await this.prisma.user.findFirst({

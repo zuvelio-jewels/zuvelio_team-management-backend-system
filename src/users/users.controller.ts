@@ -21,7 +21,7 @@ import { ApproveUserDto, AdminResetPasswordDto } from './dto';
 @Controller('users')
 @UseInterceptors(ClassSerializerInterceptor)
 export class UsersController {
-  constructor(private usersService: UsersService) { }
+  constructor(private usersService: UsersService) {}
 
   @Get()
   findAll() {
@@ -113,5 +113,15 @@ export class UsersController {
     @Body('empcode') empcode: string,
   ) {
     return this.usersService.setEmpcode(id, empcode ?? '');
+  }
+
+  @Patch(':id/cabin-no')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  setCabinNo(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('cabinNo') cabinNo: string,
+  ) {
+    return this.usersService.setCabinNo(id, cabinNo ?? '');
   }
 }

@@ -3,8 +3,24 @@ import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const mockUsers = [
-  { id: 1, name: 'Alice', email: 'alice@test.com', role: 'EMPLOYEE', isAssignable: true, isProjectAssignable: false, isApproved: true },
-  { id: 2, name: 'Bob', email: 'bob@test.com', role: 'MANAGER', isAssignable: true, isProjectAssignable: true, isApproved: true },
+  {
+    id: 1,
+    name: 'Alice',
+    email: 'alice@test.com',
+    role: 'EMPLOYEE',
+    isAssignable: true,
+    isProjectAssignable: false,
+    isApproved: true,
+  },
+  {
+    id: 2,
+    name: 'Bob',
+    email: 'bob@test.com',
+    role: 'MANAGER',
+    isAssignable: true,
+    isProjectAssignable: true,
+    isApproved: true,
+  },
 ];
 
 const mockPrisma = {
@@ -47,7 +63,9 @@ describe('UsersService', () => {
     const result = await service.findAssignable();
     expect(result).toHaveLength(1);
     expect(mockPrisma.user.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { isActive: true, isAssignable: true } }),
+      expect.objectContaining({
+        where: { isActive: true, isAssignable: true },
+      }),
     );
   });
 

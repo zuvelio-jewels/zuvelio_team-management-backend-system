@@ -3,7 +3,13 @@ import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
 
 const now = new Date();
-const mockRecord = { id: 1, userId: 1, checkIn: now, checkOut: null, date: now };
+const mockRecord = {
+  id: 1,
+  userId: 1,
+  checkIn: now,
+  checkOut: null,
+  date: now,
+};
 
 const mockAttendanceService = {
   getAll: jest.fn().mockResolvedValue([mockRecord]),
@@ -20,7 +26,9 @@ describe('AttendanceController', () => {
     jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AttendanceController],
-      providers: [{ provide: AttendanceService, useValue: mockAttendanceService }],
+      providers: [
+        { provide: AttendanceService, useValue: mockAttendanceService },
+      ],
     }).compile();
 
     controller = module.get<AttendanceController>(AttendanceController);
@@ -53,11 +61,15 @@ describe('AttendanceController', () => {
 
   it('getAvailability parses comma-separated userIds', async () => {
     await controller.getAvailability('1,2,3');
-    expect(mockAttendanceService.getAvailability).toHaveBeenCalledWith([1, 2, 3]);
+    expect(mockAttendanceService.getAvailability).toHaveBeenCalledWith([
+      1, 2, 3,
+    ]);
   });
 
   it('getAvailability passes undefined when no userIds given', async () => {
     await controller.getAvailability(undefined);
-    expect(mockAttendanceService.getAvailability).toHaveBeenCalledWith(undefined);
+    expect(mockAttendanceService.getAvailability).toHaveBeenCalledWith(
+      undefined,
+    );
   });
 });

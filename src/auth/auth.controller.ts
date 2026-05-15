@@ -49,7 +49,7 @@ const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5 MB
 @Controller('auth')
 @UseInterceptors(ClassSerializerInterceptor)
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Public()
   @Post('register')
@@ -123,7 +123,10 @@ export class AuthController {
         if (AVATAR_MIME.includes(file.mimetype)) {
           cb(null, true);
         } else {
-          cb(new BadRequestException('Only JPG, PNG, or WebP images allowed'), false);
+          cb(
+            new BadRequestException('Only JPG, PNG, or WebP images allowed'),
+            false,
+          );
         }
       },
     }),

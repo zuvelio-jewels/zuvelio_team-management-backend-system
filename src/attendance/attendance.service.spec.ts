@@ -5,7 +5,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 
 const now = new Date();
-const mockRecord = { id: 1, userId: 1, checkIn: now, checkOut: null, date: now };
+const mockRecord = {
+  id: 1,
+  userId: 1,
+  checkIn: now,
+  checkOut: null,
+  date: now,
+};
 
 const mockPrisma = {
   user: {
@@ -62,7 +68,10 @@ describe('AttendanceService', () => {
     });
 
     it('throws BadRequestException when already checked out', async () => {
-      mockPrisma.attendance.findFirst.mockResolvedValue({ ...mockRecord, checkOut: now });
+      mockPrisma.attendance.findFirst.mockResolvedValue({
+        ...mockRecord,
+        checkOut: now,
+      });
       await expect(service.checkOut(1)).rejects.toThrow(BadRequestException);
     });
 

@@ -466,9 +466,10 @@ export class ActivityService {
         // for a compact display; fall back to the full string when no pipe present)
         if (event.activeWindow) {
           const pipIdx = event.activeWindow.indexOf('|');
-          const appKey = pipIdx >= 0
-            ? event.activeWindow.slice(pipIdx + 1).trim()
-            : event.activeWindow.trim();
+          const appKey =
+            pipIdx >= 0
+              ? event.activeWindow.slice(pipIdx + 1).trim()
+              : event.activeWindow.trim();
           if (appKey) {
             bucket._appFreq.set(appKey, (bucket._appFreq.get(appKey) ?? 0) + 1);
           }
@@ -507,7 +508,8 @@ export class ActivityService {
             0,
           ).getTime();
           const segmentEnd = Math.min(endMs, nextHourMs);
-          hourlySummaries[hour].idleTimeMinutes += (segmentEnd - cursor) / 60000;
+          hourlySummaries[hour].idleTimeMinutes +=
+            (segmentEnd - cursor) / 60000;
           cursor = segmentEnd;
         }
       };
@@ -517,11 +519,17 @@ export class ActivityService {
       }
 
       if (sortedTimestamps.length > 0) {
-        addIdleInterval(sortedTimestamps[sortedTimestamps.length - 1], rangeEndMs);
+        addIdleInterval(
+          sortedTimestamps[sortedTimestamps.length - 1],
+          rangeEndMs,
+        );
       }
 
       for (const summary of hourlySummaries) {
-        summary.idleTimeMinutes = Math.max(0, Math.round(summary.idleTimeMinutes));
+        summary.idleTimeMinutes = Math.max(
+          0,
+          Math.round(summary.idleTimeMinutes),
+        );
       }
 
       // Resolve top apps per hour (top 3 by event count, strip internal _appFreq)
@@ -954,7 +962,9 @@ export class ActivityService {
    */
   async getAdminEmployeeProfile(adminRole: string, targetUserId: number) {
     if (!['ADMIN', 'MANAGER'].includes(adminRole)) {
-      throw new ForbiddenException('Only admins and managers can access employee profiles');
+      throw new ForbiddenException(
+        'Only admins and managers can access employee profiles',
+      );
     }
     const user = await this.prisma.user.findUnique({
       where: { id: targetUserId },
@@ -978,19 +988,32 @@ export class ActivityService {
         },
         deviceTokens: {
           where: { isRevoked: false },
-          select: { id: true, deviceName: true, lastUsedAt: true, createdAt: true },
+          select: {
+            id: true,
+            deviceName: true,
+            lastUsedAt: true,
+            createdAt: true,
+          },
         },
       },
     });
     if (!user) throw new NotFoundException(`User ${targetUserId} not found`);
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    return { ...user, isOnline: user.lastActivityAt ? user.lastActivityAt > fiveMinutesAgo : false };
+    return {
+      ...user,
+      isOnline: user.lastActivityAt
+        ? user.lastActivityAt > fiveMinutesAgo
+        : false,
+    };
   }
 
   /**
    * Get date-range activity summary for any employee (admin only)
    */
-  async getAdminEmployeeSummary(targetUserId: number, query: GetActivitySummaryDto) {
+  async getAdminEmployeeSummary(
+    targetUserId: number,
+    query: GetActivitySummaryDto,
+  ) {
     const { startDate, endDate } = query;
 
     const toIstDate = (date: Date) => {
@@ -1064,7 +1087,8 @@ export class ActivityService {
 
       // Re-sort after merge
       storedRows.sort((a, b) => {
-        const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime();
+        const dateCompare =
+          new Date(a.date).getTime() - new Date(b.date).getTime();
         return dateCompare !== 0 ? dateCompare : a.hour - b.hour;
       });
     }
@@ -1160,7 +1184,10 @@ export class ActivityService {
    * Broadcast update notification to all connected agents (admin only)
    * Agents will check for updates within the next polling interval
    */
-  async broadcastUpdateNotification(adminRole: string, versionInfo?: { version: string; force: boolean }) {
+  async broadcastUpdateNotification(
+    adminRole: string,
+    versionInfo?: { version: string; force: boolean },
+  ) {
     if (adminRole !== 'ADMIN') {
       throw new ForbiddenException(
         'Only admins can broadcast update notifications',
@@ -1179,7 +1206,8 @@ export class ActivityService {
 
     return {
       success: true,
-      message: 'Update notification queued. Agents will check within the next hour.',
+      message:
+        'Update notification queued. Agents will check within the next hour.',
       version: versionInfo?.version || 'latest',
     };
   }

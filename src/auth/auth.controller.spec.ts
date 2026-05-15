@@ -32,7 +32,9 @@ describe('AuthController', () => {
 
   it('register delegates to authService.register', async () => {
     const dto = { name: 'Test', email: 'a@b.com', password: 'pass' };
-    mockAuthService.register.mockResolvedValue({ message: 'Registration successful!' });
+    mockAuthService.register.mockResolvedValue({
+      message: 'Registration successful!',
+    });
     const result = await controller.register(dto as any);
     expect(mockAuthService.register).toHaveBeenCalledWith(dto);
     expect(result.message).toContain('Registration successful');

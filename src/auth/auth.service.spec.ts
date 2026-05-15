@@ -21,7 +21,9 @@ const mockJwt = {
 
 const mockConfig = { get: jest.fn().mockReturnValue('test-secret') };
 
-const mockMailer = { sendPasswordReset: jest.fn().mockResolvedValue(undefined) };
+const mockMailer = {
+  sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+};
 
 describe('AuthService', () => {
   let service: AuthService;

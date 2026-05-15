@@ -44,7 +44,9 @@ describe('LeavesController', () => {
 
   it('update patches a leave record', async () => {
     const result = await controller.update('1', { status: 'APPROVED' });
-    expect(mockLeavesService.update).toHaveBeenCalledWith(1, { status: 'APPROVED' });
+    expect(mockLeavesService.update).toHaveBeenCalledWith(1, {
+      status: 'APPROVED',
+    });
     expect(result.status).toBe('APPROVED');
   });
 });
