@@ -79,10 +79,10 @@ export class TasksService {
       },
       include: {
         assignedTo: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
         allottedFrom: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
       },
     });
@@ -116,10 +116,10 @@ export class TasksService {
       where,
       include: {
         assignedTo: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
         allottedFrom: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -137,10 +137,10 @@ export class TasksService {
       where: { id },
       include: {
         assignedTo: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
         allottedFrom: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
         documents: {
           include: { uploadedBy: { select: { id: true, name: true } } },
@@ -184,10 +184,10 @@ export class TasksService {
       data,
       include: {
         assignedTo: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
         allottedFrom: {
-          select: { id: true, name: true, email: true, role: true },
+          select: { id: true, name: true, email: true, role: true, profilePicture: true },
         },
       },
     });
