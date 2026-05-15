@@ -16,6 +16,7 @@ import { ReportsModule } from './reports/reports.module';
 import { ProjectionModule } from './projections/projection.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { NotificationModule } from './notifications/notification.module';
+import { TeamsModule } from './teams/teams.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { NotificationModule } from './notifications/notification.module';
     ProjectionModule,
     TimeTrackingModule,
     NotificationModule,
+    TeamsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

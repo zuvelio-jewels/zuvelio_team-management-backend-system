@@ -32,6 +32,8 @@ model User {
   noteHistories      TaskNoteHistory[] @relation("NoteHistoryAuthor")
   attendance         Attendance[]
   leaves             Leave[]
+  managedTeams       Team[]         @relation("TeamManager")
+  memberOfTeams      Team[]         @relation("TeamMembers")
 
   // Task Assignment
   isAssignable        Boolean @default(false)
@@ -354,18 +356,32 @@ model ProjectionAction {
   id            Int       @id @default(autoincrement())
   projectionId  Int
   projection    Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
-  
+
   employeeId    Int
   employee      User      @relation("ProjectionActions", fields: [employeeId], references: [id], onDelete: Cascade)
-  
+
   // Action Type & Details
   actionType    String    // ACCEPT, REJECT, REQUEST_TIME, SWITCH_PROJECTION, PAUSE, RESUME, COMPLETE
   details       Json?     // Additional metadata (e.g., { "additionalMinutes": 30 })
   reason        String?   // Why they took this action
-  
+
   createdAt     DateTime  @default(now())
-  
+
   @@index([projectionId])
   @@index([employeeId])
   @@index([actionType])
+}
+
+// ========== TEAM MANAGEMENT ==========
+
+model Team {
+  id         Int      @id @default(autoincrement())
+  name       String   @unique
+  managerId  Int?
+  manager    User?    @relation("TeamManager", fields: [managerId], references: [id], onDelete: SetNull)
+  members    User[]   @relation("TeamMembers")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([managerId])
 }
