@@ -53,6 +53,7 @@ model User {
   projectionsAssigned Projection[] @relation("ProjectionsAssigned")
   projectionsCreated  Projection[] @relation("ProjectionsCreated")
   timeLogs            TimeLog[] @relation("TimeLogs")
+  taskTimeLogs        TaskTimeLog[] @relation("TaskTimeLogs")
   notificationsReceived Notification[] @relation("NotificationsReceived")
   projectionActions   ProjectionAction[] @relation("ProjectionActions")
 }
@@ -72,6 +73,9 @@ model Task {
   isPresent     Boolean   @default(true)
   updatedBy     DateTime?
 
+  // Time tracking fields
+  allocatedMinutes Int?   // Time budget set by admin/manager (null = no budget set)
+
   assignedToId  Int?
   assignedTo    User?     @relation("AssignedTo", fields: [assignedToId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
@@ -80,9 +84,50 @@ model Task {
 
   documents     TaskDocument[]
   noteHistories TaskNoteHistory[]
+  operations    TaskOperation[]
+  taskTimeLogs  TaskTimeLog[]
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model TaskOperation {
+  id          Int      @id @default(autoincrement())
+  taskId      Int
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
+}
+
+model TaskTimeLog {
+  id             Int       @id @default(autoincrement())
+  taskId         Int
+  task           Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  employeeId     Int
+  employee       User      @relation("TaskTimeLogs", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  sessionStart   DateTime
+  sessionEnd     DateTime?
+  allocatedDuration Int    @default(0) // minutes allocated (copied from task.allocatedMinutes at start)
+  actualDuration Int       @default(0) // minutes spent (computed)
+
+  status         String    @default("active") // active, paused, completed
+  switchReason   String?   // reason if switched away before completion
+
+  taskBreaks     TaskBreak[]
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([taskId])
+  @@index([employeeId])
+  @@index([sessionStart])
+  @@index([status])
 }
 
 model TaskNoteHistory {
@@ -315,13 +360,27 @@ model Break {
   id        Int       @id @default(autoincrement())
   timeLogId Int
   timeLog   TimeLog   @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
-  
+
   startTime DateTime
   endTime   DateTime?
   duration  Int       @default(0)  // minutes
-  
+
   createdAt DateTime  @default(now())
-  
+
+  @@index([timeLogId])
+}
+
+model TaskBreak {
+  id          Int         @id @default(autoincrement())
+  timeLogId   Int
+  timeLog     TaskTimeLog @relation(fields: [timeLogId], references: [id], onDelete: Cascade)
+
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int         @default(0) // minutes
+
+  createdAt   DateTime    @default(now())
+
   @@index([timeLogId])
 }
 

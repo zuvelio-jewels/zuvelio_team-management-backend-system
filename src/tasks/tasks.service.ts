@@ -81,6 +81,7 @@ export class TasksService {
         assignedToId: dto.assignedToId,
         allottedFromId,
         alert: 'NOT_START_YET_IN_TIME',
+        allocatedMinutes: dto.allocatedMinutes ?? null,
       },
       include: {
         assignedTo: {

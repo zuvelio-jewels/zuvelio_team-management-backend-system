@@ -17,6 +17,7 @@ import { ProjectionModule } from './projections/projection.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 import { NotificationModule } from './notifications/notification.module';
 import { TeamsModule } from './teams/teams.module';
+import { TaskTimeTrackingModule } from './task-time-tracking/task-time-tracking.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { TeamsModule } from './teams/teams.module';
     TimeTrackingModule,
     NotificationModule,
     TeamsModule,
+    TaskTimeTrackingModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsIn, IsBoolean } from 'class-validator';
+import { IsOptional, IsString, IsIn, IsBoolean, IsInt, Min } from 'class-validator';
 
 export class UpdateTaskDto {
   @IsOptional()
@@ -39,4 +39,9 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsBoolean()
   isPresent?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  allocatedMinutes?: number;
 }
