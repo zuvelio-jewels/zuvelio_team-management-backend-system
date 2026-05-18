@@ -32,4 +32,9 @@ export class CreateTaskDto {
   @IsInt()
   @Min(1)
   allocatedMinutes?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['HIGH', 'MEDIUM', 'LOW'])
+  priority?: string;
 }

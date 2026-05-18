@@ -82,6 +82,7 @@ export class TasksService {
         allottedFromId,
         alert: 'NOT_START_YET_IN_TIME',
         allocatedMinutes: dto.allocatedMinutes ?? null,
+        priority: dto.priority ?? 'MEDIUM',
       },
       include: {
         assignedTo: {

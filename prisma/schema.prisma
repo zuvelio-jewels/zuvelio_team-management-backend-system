@@ -70,6 +70,7 @@ model Task {
   alert         String?   // Auto-computed: COMPLETE_IN_TIME, LATE_COMPLETE, RE_WORK, etc.
   qcCheck       String?   // DONE, ISSUE
   remark        String?
+  priority      String    @default("MEDIUM") // HIGH, MEDIUM, LOW
   isPresent     Boolean   @default(true)
   updatedBy     DateTime?
 
