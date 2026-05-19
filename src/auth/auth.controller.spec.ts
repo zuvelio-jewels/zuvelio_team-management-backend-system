@@ -42,10 +42,10 @@ describe('AuthController', () => {
 
   it('login delegates to authService.login', async () => {
     const dto = { email: 'a@b.com', password: 'pass' };
-    mockAuthService.login.mockResolvedValue({ accessToken: 'tok' });
+    mockAuthService.login.mockResolvedValue({ requiresOtp: true, otpToken: 'tok' });
     const result = await controller.login(dto as any);
     expect(mockAuthService.login).toHaveBeenCalledWith(dto);
-    expect(result.accessToken).toBe('tok');
+    expect(result.requiresOtp).toBe(true);
   });
 
   it('logout delegates to authService.logout with user id', async () => {

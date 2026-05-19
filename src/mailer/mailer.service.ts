@@ -9,7 +9,7 @@ export class MailerService {
 
   constructor(private configService: ConfigService) {
     const mailConfig = {
-      host: this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com'),
+      host: this.configService.get<string>('SMTP_HOST', 'smtp.zoho.in'),
       port: this.configService.get<number>('SMTP_PORT', 587),
       secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
       auth: {
@@ -38,7 +38,7 @@ export class MailerService {
       await this.transporter.sendMail({
         from: this.configService.get<string>(
           'SMTP_FROM_EMAIL',
-          'noreply@zuvelio.com',
+          'support@zuvelio.org',
         ),
         to: email,
         subject: 'Reset Your Password - Zuvelio',
@@ -53,6 +53,67 @@ export class MailerService {
       );
       throw error;
     }
+  }
+
+  async sendOtpEmail(email: string, name: string, otp: string): Promise<void> {
+    try {
+      const htmlContent = this.getOtpTemplate(name, otp);
+
+      await this.transporter.sendMail({
+        from: this.configService.get<string>(
+          'SMTP_FROM_EMAIL',
+          'support@zuvelio.org',
+        ),
+        to: email,
+        subject: 'Your Sign-In Verification Code - Zuvelio',
+        html: htmlContent,
+      });
+
+      this.logger.log(`OTP email sent to ${email}`);
+    } catch (error) {
+      this.logger.error(`Failed to send OTP email to ${email}:`, error);
+      throw error;
+    }
+  }
+
+  private getOtpTemplate(name: string, otp: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Your Verification Code</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #cf9a43; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+            .content { background-color: #f9f9f9; padding: 20px; border: 1px solid #ddd; border-radius: 0 0 5px 5px; }
+            .otp-box { background-color: #ffffff; border: 2px solid #cf9a43; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0; }
+            .otp-code { font-size: 36px; font-weight: bold; letter-spacing: 10px; color: #cf9a43; }
+            .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #999; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Sign-In Verification</h1>
+            </div>
+            <div class="content">
+              <p>Hi ${name},</p>
+              <p>Use the code below to complete your sign-in. This code expires in <strong>10 minutes</strong>.</p>
+              <div class="otp-box">
+                <div class="otp-code">${otp}</div>
+              </div>
+              <p>If you did not attempt to sign in, please ignore this email and consider changing your password.</p>
+              <p><strong>Never share this code with anyone.</strong></p>
+            </div>
+            <div class="footer">
+              <p>&copy; 2026 Zuvelio. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
   }
 
   private getPasswordResetTemplate(name: string, resetLink: string): string {

@@ -24,6 +24,7 @@ const SALT_ROUNDS = 12;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCK_DURATION_MINUTES = 15;
 const RESET_TOKEN_EXPIRY_MINUTES = 30;
+const OTP_EXPIRY_MINUTES = 10;
 
 @Injectable()
 export class AuthService {
@@ -147,19 +148,81 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Reset failed attempts on successful login
+    // Reset failed attempts on successful password check
     await this.prisma.user.update({
       where: { id: user.id },
       data: { failedLoginAttempts: 0, lockedUntil: null },
     });
 
+    // Generate a 6-digit OTP and store its hash
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    const hashedOtp = await bcrypt.hash(otp, SALT_ROUNDS);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        otpCode: hashedOtp,
+        otpExpiresAt: new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000),
+      },
+    });
+
+    // Send OTP email (non-blocking — failure is surfaced to the caller)
+    await this.mailerService.sendOtpEmail(user.email, user.name, otp);
+
+    // Issue a short-lived pre-auth token so the verify-otp endpoint can
+    // identify the user without exposing full credentials.
+    const otpToken = await this.jwtService.signAsync(
+      { sub: user.id, type: 'otp' },
+      {
+        secret: this.configService.getOrThrow<string>('JWT_SECRET'),
+        expiresIn: `${OTP_EXPIRY_MINUTES}m`,
+      },
+    );
+
+    return { requiresOtp: true, otpToken };
+  }
+
+  async verifyOtp(otpToken: string, otp: string) {
+    // Validate the pre-auth token
+    let payload: { sub: number; type: string };
+    try {
+      payload = this.jwtService.verify(otpToken, {
+        secret: this.configService.getOrThrow<string>('JWT_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired OTP session');
+    }
+
+    if (payload.type !== 'otp') {
+      throw new UnauthorizedException('Invalid token type');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
+
+    if (!user || !user.isActive || !user.isApproved) {
+      throw new UnauthorizedException('Access denied');
+    }
+
+    if (!user.otpCode || !user.otpExpiresAt || user.otpExpiresAt < new Date()) {
+      throw new UnauthorizedException('OTP has expired. Please sign in again.');
+    }
+
+    const isOtpValid = await bcrypt.compare(otp, user.otpCode);
+    if (!isOtpValid) {
+      throw new UnauthorizedException('Invalid OTP code');
+    }
+
+    // Clear OTP after successful verification
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { otpCode: null, otpExpiresAt: null },
+    });
+
     const tokens = await this.generateTokens(user.id, user.email, user.role);
 
-    // Store hashed refresh token
-    const hashedRefreshToken = await bcrypt.hash(
-      tokens.refreshToken,
-      SALT_ROUNDS,
-    );
+    const hashedRefreshToken = await bcrypt.hash(tokens.refreshToken, SALT_ROUNDS);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { refreshToken: hashedRefreshToken },

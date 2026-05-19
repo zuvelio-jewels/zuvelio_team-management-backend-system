@@ -23,6 +23,7 @@ import {
   ChangePasswordDto,
   RefreshTokenDto,
   UpdateProfileDto,
+  VerifyOtpDto,
 } from './dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -62,6 +63,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Public()
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  verifyOtp(@Body() dto: VerifyOtpDto) {
+    return this.authService.verifyOtp(dto.otpToken, dto.otp);
   }
 
   @Public()

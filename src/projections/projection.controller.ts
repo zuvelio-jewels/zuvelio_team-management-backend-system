@@ -15,6 +15,11 @@ import { ProjectionService } from './projection.service';
 import { CreateProjectionDto } from './dto/create-projection.dto';
 import { UpdateProjectionDto } from './dto/update-projection.dto';
 import { ProjectionActionDto } from './dto/projection-action.dto';
+import {
+  CreateProjectionOperationDto,
+  UpdateProjectionOperationDto,
+  BulkCreateOperationsDto,
+} from './dto/projection-operation.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -118,5 +123,90 @@ export class ProjectionController {
       req.user.id,
       actionDto,
     );
+  }
+
+  // ── Operations ──────────────────────────────────────────────
+
+  @Get(':id/operations')
+  getOperations(@Param('id', ParseIntPipe) projectionId: number) {
+    return this.projectionService.getOperations(projectionId);
+  }
+
+  @Post(':id/operations')
+  @Roles('ADMIN', 'MANAGER')
+  addOperation(
+    @Param('id', ParseIntPipe) projectionId: number,
+    @Body() dto: CreateProjectionOperationDto,
+    @Request() req,
+  ) {
+    return this.projectionService.addOperation(projectionId, dto, req.user.id);
+  }
+
+  @Post(':id/operations/bulk')
+  @Roles('ADMIN', 'MANAGER')
+  bulkAddOperations(
+    @Param('id', ParseIntPipe) projectionId: number,
+    @Body() dto: BulkCreateOperationsDto,
+    @Request() req,
+  ) {
+    return this.projectionService.bulkAddOperations(projectionId, dto.operations, req.user.id);
+  }
+
+  @Patch('operations/:operationId')
+  @Roles('ADMIN', 'MANAGER')
+  updateOperation(
+    @Param('operationId', ParseIntPipe) operationId: number,
+    @Body() dto: UpdateProjectionOperationDto,
+    @Request() req,
+  ) {
+    return this.projectionService.updateOperation(operationId, dto, req.user.id);
+  }
+
+  @Delete('operations/:operationId')
+  @Roles('ADMIN', 'MANAGER')
+  deleteOperation(
+    @Param('operationId', ParseIntPipe) operationId: number,
+    @Request() req,
+  ) {
+    return this.projectionService.deleteOperation(operationId, req.user.id);
+  }
+
+  // ── Operation Time Tracking ─────────────────────────────────
+
+  @Get('operations/timer/current')
+  getCurrentTimer(@Request() req) {
+    return this.projectionService.getCurrentOperationTimer(req.user.id);
+  }
+
+  @Post('operations/:operationId/timer/start')
+  startTimer(
+    @Param('operationId', ParseIntPipe) operationId: number,
+    @Request() req,
+  ) {
+    return this.projectionService.startOperationTimer(operationId, req.user.id);
+  }
+
+  @Post('operations/timer/:timeLogId/pause')
+  pauseTimer(
+    @Param('timeLogId', ParseIntPipe) timeLogId: number,
+    @Request() req,
+  ) {
+    return this.projectionService.pauseOperationTimer(timeLogId, req.user.id);
+  }
+
+  @Post('operations/timer/:timeLogId/resume')
+  resumeTimer(
+    @Param('timeLogId', ParseIntPipe) timeLogId: number,
+    @Request() req,
+  ) {
+    return this.projectionService.resumeOperationTimer(timeLogId, req.user.id);
+  }
+
+  @Post('operations/timer/:timeLogId/complete')
+  completeTimer(
+    @Param('timeLogId', ParseIntPipe) timeLogId: number,
+    @Request() req,
+  ) {
+    return this.projectionService.completeOperationTimer(timeLogId, req.user.id);
   }
 }

@@ -26,6 +26,9 @@ model User {
   profilePicture         String?
   cabinNo                String?
 
+  otpCode      String?
+  otpExpiresAt DateTime?
+
   assignedTasks      Task[]         @relation("AssignedTo")
   allottedTasks      Task[]         @relation("AllottedFrom")
   uploadedDocuments  TaskDocument[] @relation("UploadedDocuments")
@@ -317,23 +320,47 @@ model Projection {
   
   // Relationships
   timeLogs          TimeLog[]
+  operations        ProjectionOperation[]
   notifications     Notification[]
   projectionActions ProjectionAction[]
-  
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
-  
+
   @@index([employeeId])
   @@index([createdByAdminId])
   @@index([status])
   @@index([assignedAt])
 }
 
+model ProjectionOperation {
+  id               Int        @id @default(autoincrement())
+  projectionId     Int
+  projection       Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+
+  title            String
+  description      String?
+  allocatedMinutes Int?
+  order            Int        @default(0)
+  status           String     @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED
+
+  timeLogs         TimeLog[]
+
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@index([projectionId])
+  @@index([status])
+}
+
 model TimeLog {
   id                Int       @id @default(autoincrement())
   projectionId      Int
   projection        Projection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
-  
+
+  operationId       Int?
+  operation         ProjectionOperation? @relation(fields: [operationId], references: [id], onDelete: SetNull)
+
   employeeId        Int
   employee          User      @relation("TimeLogs", fields: [employeeId], references: [id], onDelete: Cascade)
   

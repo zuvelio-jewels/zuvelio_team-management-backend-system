@@ -8,6 +8,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectionDto } from './dto/create-projection.dto';
 import { UpdateProjectionDto } from './dto/update-projection.dto';
 import { ProjectionActionDto } from './dto/projection-action.dto';
+import {
+  CreateProjectionOperationDto,
+  UpdateProjectionOperationDto,
+} from './dto/projection-operation.dto';
 import { NotificationService } from '../notifications/notification.service';
 
 @Injectable()
@@ -91,17 +95,19 @@ export class ProjectionService {
       include: {
         employee: { select: { id: true, name: true, email: true } },
         createdByAdmin: { select: { id: true, name: true } },
-        timeLogs: {
+        operations: {
+          orderBy: { order: 'asc' },
           include: {
-            breaks: true,
+            timeLogs: {
+              select: { actualDuration: true, status: true },
+            },
           },
         },
-        projectionActions: {
-          orderBy: { createdAt: 'desc' },
+        timeLogs: {
+          include: { breaks: true },
         },
-        notifications: {
-          orderBy: { createdAt: 'desc' },
-        },
+        projectionActions: { orderBy: { createdAt: 'desc' } },
+        notifications: { orderBy: { createdAt: 'desc' } },
       },
     });
 
@@ -705,6 +711,319 @@ export class ProjectionService {
         actualDuration,
       },
     });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // PROJECTION OPERATIONS
+  // ─────────────────────────────────────────────────────────────
+
+  async addOperation(
+    projectionId: number,
+    dto: CreateProjectionOperationDto,
+    adminId: number,
+  ) {
+    const projection = await this.findOne(projectionId);
+    if (projection.createdByAdminId !== adminId) {
+      throw new ForbiddenException('Only the creator can add operations');
+    }
+
+    const maxOrder = await this.prisma.projectionOperation.aggregate({
+      where: { projectionId },
+      _max: { order: true },
+    });
+
+    return this.prisma.projectionOperation.create({
+      data: {
+        projectionId,
+        title: dto.title,
+        description: dto.description,
+        allocatedMinutes: dto.allocatedMinutes,
+        order: dto.order ?? (maxOrder._max.order ?? 0) + 1,
+      },
+    });
+  }
+
+  async bulkAddOperations(
+    projectionId: number,
+    operations: CreateProjectionOperationDto[],
+    adminId: number,
+  ) {
+    const projection = await this.findOne(projectionId);
+    if (projection.createdByAdminId !== adminId) {
+      throw new ForbiddenException('Only the creator can add operations');
+    }
+
+    const maxOrder = await this.prisma.projectionOperation.aggregate({
+      where: { projectionId },
+      _max: { order: true },
+    });
+
+    let nextOrder = (maxOrder._max.order ?? 0) + 1;
+    const data = operations.map((op) => ({
+      projectionId,
+      title: op.title,
+      description: op.description ?? null,
+      allocatedMinutes: op.allocatedMinutes ?? null,
+      order: op.order ?? nextOrder++,
+    }));
+
+    await this.prisma.projectionOperation.createMany({ data });
+    return this.prisma.projectionOperation.findMany({
+      where: { projectionId },
+      orderBy: { order: 'asc' },
+    });
+  }
+
+  async updateOperation(
+    operationId: number,
+    dto: UpdateProjectionOperationDto,
+    adminId: number,
+  ) {
+    const op = await this.prisma.projectionOperation.findUnique({
+      where: { id: operationId },
+      include: { projection: { select: { createdByAdminId: true } } },
+    });
+    if (!op) throw new NotFoundException('Operation not found');
+    if (op.projection.createdByAdminId !== adminId) {
+      throw new ForbiddenException('Only the creator can update operations');
+    }
+
+    return this.prisma.projectionOperation.update({
+      where: { id: operationId },
+      data: dto,
+    });
+  }
+
+  async deleteOperation(operationId: number, adminId: number) {
+    const op = await this.prisma.projectionOperation.findUnique({
+      where: { id: operationId },
+      include: { projection: { select: { createdByAdminId: true } } },
+    });
+    if (!op) throw new NotFoundException('Operation not found');
+    if (op.projection.createdByAdminId !== adminId) {
+      throw new ForbiddenException('Only the creator can delete operations');
+    }
+
+    return this.prisma.projectionOperation.delete({ where: { id: operationId } });
+  }
+
+  async getOperations(projectionId: number) {
+    const ops = await this.prisma.projectionOperation.findMany({
+      where: { projectionId },
+      orderBy: { order: 'asc' },
+      include: {
+        timeLogs: {
+          select: { id: true, actualDuration: true, status: true, sessionStart: true, sessionEnd: true },
+        },
+      },
+    });
+
+    return ops.map((op) => ({
+      ...op,
+      totalMinutes: op.timeLogs.reduce((s, l) => s + (l.actualDuration ?? 0), 0),
+    }));
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // OPERATION TIME TRACKING
+  // ─────────────────────────────────────────────────────────────
+
+  async startOperationTimer(operationId: number, employeeId: number) {
+    const op = await this.prisma.projectionOperation.findUnique({
+      where: { id: operationId },
+      include: {
+        projection: {
+          select: { id: true, employeeId: true, status: true, allocatedMinutes: true },
+        },
+      },
+    });
+
+    if (!op) throw new NotFoundException('Operation not found');
+    if (op.projection.employeeId !== employeeId) {
+      throw new ForbiddenException('Not your projection');
+    }
+    if (!['ACCEPTED', 'IN_PROGRESS'].includes(op.projection.status)) {
+      throw new BadRequestException('Projection must be accepted before starting work');
+    }
+    if (op.status === 'COMPLETED') {
+      throw new BadRequestException('Operation already completed');
+    }
+
+    // Close any other open timer for this employee
+    await this.closeOpenTimers(employeeId);
+
+    // Mark operation and projection as IN_PROGRESS
+    await this.prisma.projectionOperation.update({
+      where: { id: operationId },
+      data: { status: 'IN_PROGRESS' },
+    });
+    await this.prisma.projection.update({
+      where: { id: op.projection.id },
+      data: { status: 'IN_PROGRESS' },
+    });
+
+    const timeLog = await this.prisma.timeLog.create({
+      data: {
+        projectionId: op.projection.id,
+        operationId,
+        employeeId,
+        sessionStart: new Date(),
+        allocatedDuration: op.allocatedMinutes ?? op.projection.allocatedMinutes,
+        status: 'active',
+      },
+    });
+
+    return { timeLog, operation: op };
+  }
+
+  async pauseOperationTimer(timeLogId: number, employeeId: number) {
+    const log = await this.getOpenTimeLog(timeLogId, employeeId);
+
+    await this.prisma.break.create({
+      data: { timeLogId: log.id, startTime: new Date() },
+    });
+
+    return this.prisma.timeLog.update({
+      where: { id: log.id },
+      data: { status: 'paused' },
+    });
+  }
+
+  async resumeOperationTimer(timeLogId: number, employeeId: number) {
+    const log = await this.getOpenTimeLog(timeLogId, employeeId);
+    if (log.status !== 'paused') {
+      throw new BadRequestException('Timer is not paused');
+    }
+
+    const openBreak = await this.prisma.break.findFirst({
+      where: { timeLogId: log.id, endTime: null },
+    });
+
+    if (openBreak) {
+      const now = new Date();
+      const duration = Math.max(
+        0,
+        Math.round((now.getTime() - new Date(openBreak.startTime).getTime()) / 60000),
+      );
+      await this.prisma.break.update({
+        where: { id: openBreak.id },
+        data: { endTime: now, duration },
+      });
+    }
+
+    return this.prisma.timeLog.update({
+      where: { id: log.id },
+      data: { status: 'active' },
+    });
+  }
+
+  async completeOperationTimer(timeLogId: number, employeeId: number) {
+    const log = await this.getOpenTimeLog(timeLogId, employeeId);
+    const now = new Date();
+
+    // Close any open break
+    const openBreak = await this.prisma.break.findFirst({
+      where: { timeLogId: log.id, endTime: null },
+    });
+    if (openBreak) {
+      const duration = Math.max(
+        0,
+        Math.round((now.getTime() - new Date(openBreak.startTime).getTime()) / 60000),
+      );
+      await this.prisma.break.update({
+        where: { id: openBreak.id },
+        data: { endTime: now, duration },
+      });
+    }
+
+    const allBreaks = await this.prisma.break.findMany({ where: { timeLogId: log.id } });
+    const breaksMins = allBreaks.reduce((s, b) => s + (b.duration ?? 0), 0);
+    const grossMins = (now.getTime() - new Date(log.sessionStart).getTime()) / 60000;
+    const actualDuration = Math.max(0, Math.round(grossMins - breaksMins));
+
+    const completed = await this.prisma.timeLog.update({
+      where: { id: log.id },
+      data: { sessionEnd: now, status: 'completed', actualDuration },
+    });
+
+    // Mark operation complete
+    await this.prisma.projectionOperation.update({
+      where: { id: log.operationId! },
+      data: { status: 'COMPLETED' },
+    });
+
+    // Check if ALL operations are complete → auto-complete projection
+    const allOps = await this.prisma.projectionOperation.findMany({
+      where: { projectionId: log.projectionId },
+    });
+    const allDone = allOps.length > 0 && allOps.every((o) => o.status === 'COMPLETED');
+    if (allDone) {
+      const totals = await this.prisma.timeLog.aggregate({
+        where: { projectionId: log.projectionId },
+        _sum: { actualDuration: true },
+      });
+      await this.prisma.projection.update({
+        where: { id: log.projectionId },
+        data: { status: 'COMPLETED', completedAt: now },
+      });
+    }
+
+    return { timeLog: completed, allOperationsComplete: allDone };
+  }
+
+  async getCurrentOperationTimer(employeeId: number) {
+    return this.prisma.timeLog.findFirst({
+      where: {
+        employeeId,
+        sessionEnd: null,
+        status: { in: ['active', 'paused'] },
+        operationId: { not: null },
+      },
+      include: {
+        operation: true,
+        projection: { select: { id: true, title: true, allocatedMinutes: true } },
+        breaks: true,
+      },
+      orderBy: { sessionStart: 'desc' },
+    });
+  }
+
+  private async closeOpenTimers(employeeId: number) {
+    const openLogs = await this.prisma.timeLog.findMany({
+      where: { employeeId, sessionEnd: null, status: { in: ['active', 'paused'] } },
+      include: { breaks: true },
+    });
+
+    for (const log of openLogs) {
+      const now = new Date();
+      const openBreak = log.breaks.find((b) => !b.endTime);
+      let breaksMins = log.breaks.reduce((s, b) => s + (b.duration ?? 0), 0);
+
+      if (openBreak) {
+        const bd = Math.max(0, Math.round((now.getTime() - new Date(openBreak.startTime).getTime()) / 60000));
+        await this.prisma.break.update({ where: { id: openBreak.id }, data: { endTime: now, duration: bd } });
+        breaksMins += bd;
+      }
+
+      const grossMins = (now.getTime() - new Date(log.sessionStart).getTime()) / 60000;
+      const actualDuration = Math.max(0, Math.round(grossMins - breaksMins));
+
+      await this.prisma.timeLog.update({
+        where: { id: log.id },
+        data: { sessionEnd: now, status: 'completed', actualDuration },
+      });
+    }
+  }
+
+  private async getOpenTimeLog(timeLogId: number, employeeId: number) {
+    const log = await this.prisma.timeLog.findUnique({
+      where: { id: timeLogId },
+      include: { breaks: true },
+    });
+    if (!log) throw new NotFoundException('Time log not found');
+    if (log.employeeId !== employeeId) throw new ForbiddenException('Not your timer');
+    if (log.sessionEnd) throw new BadRequestException('Timer already closed');
+    return log;
   }
 
   // Get projections for admin dashboard
