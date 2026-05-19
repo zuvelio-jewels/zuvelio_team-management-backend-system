@@ -9,8 +9,6 @@ export class MailerService {
   private logger = new Logger(MailerService.name);
 
   constructor(private configService: ConfigService) {
-    // Read directly from process.env as primary source — ConfigService may not
-    // reflect Railway-injected vars when the .env file path resolves to missing.
     const apiKey =
       process.env['RESEND_API_KEY'] ??
       this.configService.get<string>('RESEND_API_KEY');
@@ -19,15 +17,21 @@ export class MailerService {
       process.env['SMTP_FROM_EMAIL'] ??
       this.configService.get<string>('SMTP_FROM_EMAIL', 'support@zuvelio.org');
 
+    // Startup diagnostics — shows in Railway logs so we can confirm the var is injected
     this.logger.log(
-      `Mailer init — RESEND_API_KEY present: ${!!apiKey}, from: ${this.fromEmail}`,
+      `Mailer init — NODE_ENV: ${process.env['NODE_ENV']}, ` +
+      `RESEND_API_KEY via process.env: ${process.env['RESEND_API_KEY'] ? `set (${process.env['RESEND_API_KEY']!.slice(0, 8)}...)` : 'MISSING'}, ` +
+      `via ConfigService: ${this.configService.get('RESEND_API_KEY') ? 'set' : 'MISSING'}, ` +
+      `from: ${this.fromEmail}`,
     );
 
     if (apiKey) {
       this.resend = new Resend(apiKey);
       this.logger.log('Resend email service ready.');
     } else {
-      this.logger.error('RESEND_API_KEY is not set — add it to Railway variables.');
+      this.logger.error(
+        'RESEND_API_KEY is not set — add it to Railway service variables and trigger a redeploy.',
+      );
     }
   }
 
