@@ -8,17 +8,35 @@ export class MailerService {
   private logger = new Logger(MailerService.name);
 
   constructor(private configService: ConfigService) {
-    const mailConfig = {
-      host: this.configService.get<string>('SMTP_HOST', 'smtp.zoho.in'),
-      port: this.configService.get<number>('SMTP_PORT', 587),
-      secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
-      auth: {
-        user: this.configService.get<string>('SMTP_USER'),
-        pass: this.configService.get<string>('SMTP_PASSWORD'),
-      },
-    };
+    const host = this.configService.get<string>('SMTP_HOST', 'smtp.zoho.in');
+    const port = this.configService.get<number>('SMTP_PORT', 587);
+    const secure = this.configService.get<string>('SMTP_SECURE', 'false') === 'true';
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASSWORD');
 
-    this.transporter = nodemailer.createTransport(mailConfig);
+    this.transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,                          // true = SSL (465), false = STARTTLS (587)
+      auth: { user, pass },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 15_000,
+    });
+
+    // Verify SMTP on startup so misconfiguration is caught early
+    this.transporter.verify((error) => {
+      if (error) {
+        this.logger.error(
+          `SMTP connection FAILED [${host}:${port} secure=${secure}] — ${error.message}\n` +
+          `Fix: (1) Enable SMTP in Zoho Mail → Settings → Security → App Passwords\n` +
+          `     (2) If 2FA is ON, use an App Password as SMTP_PASSWORD\n` +
+          `     (3) Try SMTP_PORT=465 with SMTP_SECURE=true OR port=587 secure=false`,
+        );
+      } else {
+        this.logger.log(`SMTP connection verified [${host}:${port} secure=${secure}] user=${user}`);
+      }
+    });
   }
 
   async sendPasswordResetEmail(

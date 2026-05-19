@@ -3,6 +3,8 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -28,6 +30,8 @@ const OTP_EXPIRY_MINUTES = 10;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -166,8 +170,15 @@ export class AuthService {
       },
     });
 
-    // Send OTP email (non-blocking — failure is surfaced to the caller)
-    await this.mailerService.sendOtpEmail(user.email, user.name, otp);
+    // Send OTP email — surface SMTP errors as a clean 503 instead of unhandled 500
+    try {
+      await this.mailerService.sendOtpEmail(user.email, user.name, otp);
+    } catch (emailError) {
+      this.logger.error(`OTP email failed for ${user.email}: ${(emailError as Error).message}`);
+      throw new ServiceUnavailableException(
+        'Could not send OTP email. Please check your email configuration or try again.',
+      );
+    }
 
     // Issue a short-lived pre-auth token so the verify-otp endpoint can
     // identify the user without exposing full credentials.
