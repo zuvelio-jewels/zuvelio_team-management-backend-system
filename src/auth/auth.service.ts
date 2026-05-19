@@ -174,9 +174,10 @@ export class AuthService {
     try {
       await this.mailerService.sendOtpEmail(user.email, user.name, otp);
     } catch (emailError) {
-      this.logger.error(`OTP email failed for ${user.email}: ${(emailError as Error).message}`);
+      const reason = (emailError as Error).message;
+      this.logger.error(`OTP email failed for ${user.email}: ${reason}`);
       throw new ServiceUnavailableException(
-        'Could not send OTP email. Please check your email configuration or try again.',
+        `Could not send OTP email: ${reason}`,
       );
     }
 

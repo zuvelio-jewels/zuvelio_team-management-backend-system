@@ -66,7 +66,9 @@ export class MailerService {
     });
 
     if (error) {
-      this.logger.error(`Failed to send OTP email to ${email}: ${error.message}`);
+      this.logger.error(
+        `Resend error sending OTP to ${email} — name: ${(error as any).name}, statusCode: ${(error as any).statusCode}, message: ${error.message}`,
+      );
       throw new Error(error.message);
     }
 
