@@ -4,26 +4,33 @@ import { Resend } from 'resend';
 
 @Injectable()
 export class MailerService {
-  private resend: Resend;
+  private resend: Resend | null = null;
   private fromEmail: string;
   private logger = new Logger(MailerService.name);
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get<string>('RESEND_API_KEY', '');
+    const apiKey = this.configService.get<string>('RESEND_API_KEY');
     this.fromEmail = this.configService.get<string>('SMTP_FROM_EMAIL', 'support@zuvelio.org');
-    this.resend = new Resend(apiKey);
-    if (!apiKey) {
-      this.logger.error('RESEND_API_KEY is not set — email sending will fail. Add it to Railway variables.');
-    } else {
+    if (apiKey) {
+      this.resend = new Resend(apiKey);
       this.logger.log(`Resend email service initialized (from: ${this.fromEmail})`);
+    } else {
+      this.logger.error('RESEND_API_KEY is not set — add it to Railway variables.');
     }
+  }
+
+  private getResend(): Resend {
+    if (!this.resend) {
+      throw new Error('Email service not configured. RESEND_API_KEY environment variable is missing.');
+    }
+    return this.resend;
   }
 
   async sendPasswordResetEmail(email: string, name: string, resetToken: string): Promise<void> {
     const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:4200');
     const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
-    const { error } = await this.resend.emails.send({
+    const { error } = await this.getResend().emails.send({
       from: this.fromEmail,
       to: email,
       subject: 'Reset Your Password - Zuvelio',
@@ -39,7 +46,7 @@ export class MailerService {
   }
 
   async sendOtpEmail(email: string, name: string, otp: string): Promise<void> {
-    const { error } = await this.resend.emails.send({
+    const { error } = await this.getResend().emails.send({
       from: this.fromEmail,
       to: email,
       subject: 'Your Sign-In Verification Code - Zuvelio',
