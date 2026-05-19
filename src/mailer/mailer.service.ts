@@ -1,97 +1,53 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 @Injectable()
 export class MailerService {
-  private transporter: nodemailer.Transporter;
+  private resend: Resend;
+  private fromEmail: string;
   private logger = new Logger(MailerService.name);
 
   constructor(private configService: ConfigService) {
-    const host = this.configService.get<string>('SMTP_HOST', 'smtp.zoho.in');
-    const port = this.configService.get<number>('SMTP_PORT', 587);
-    const secure = this.configService.get<string>('SMTP_SECURE', 'false') === 'true';
-    const user = this.configService.get<string>('SMTP_USER');
-    const pass = this.configService.get<string>('SMTP_PASSWORD');
-
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,                          // true = SSL (465), false = STARTTLS (587)
-      auth: { user, pass },
-      connectionTimeout: 10_000,
-      greetingTimeout: 10_000,
-      socketTimeout: 15_000,
-    });
-
-    // Verify SMTP on startup so misconfiguration is caught early
-    this.transporter.verify((error) => {
-      if (error) {
-        this.logger.error(
-          `SMTP connection FAILED [${host}:${port} secure=${secure}] — ${error.message}\n` +
-          `Fix: (1) Enable SMTP in Zoho Mail → Settings → Security → App Passwords\n` +
-          `     (2) If 2FA is ON, use an App Password as SMTP_PASSWORD\n` +
-          `     (3) Try SMTP_PORT=465 with SMTP_SECURE=true OR port=587 secure=false`,
-        );
-      } else {
-        this.logger.log(`SMTP connection verified [${host}:${port} secure=${secure}] user=${user}`);
-      }
-    });
+    const apiKey = this.configService.getOrThrow<string>('RESEND_API_KEY');
+    this.fromEmail = this.configService.get<string>('SMTP_FROM_EMAIL', 'support@zuvelio.org');
+    this.resend = new Resend(apiKey);
+    this.logger.log(`Resend email service initialized (from: ${this.fromEmail})`);
   }
 
-  async sendPasswordResetEmail(
-    email: string,
-    name: string,
-    resetToken: string,
-  ): Promise<void> {
-    try {
-      const frontendUrl = this.configService.get<string>(
-        'FRONTEND_URL',
-        'http://localhost:80',
-      );
-      const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+  async sendPasswordResetEmail(email: string, name: string, resetToken: string): Promise<void> {
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL', 'http://localhost:4200');
+    const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
 
-      const htmlContent = this.getPasswordResetTemplate(name, resetLink);
+    const { error } = await this.resend.emails.send({
+      from: this.fromEmail,
+      to: email,
+      subject: 'Reset Your Password - Zuvelio',
+      html: this.getPasswordResetTemplate(name, resetLink),
+    });
 
-      await this.transporter.sendMail({
-        from: this.configService.get<string>(
-          'SMTP_FROM_EMAIL',
-          'support@zuvelio.org',
-        ),
-        to: email,
-        subject: 'Reset Your Password - Zuvelio',
-        html: htmlContent,
-      });
-
-      this.logger.log(`Password reset email sent to ${email}`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to send password reset email to ${email}:`,
-        error,
-      );
-      throw error;
+    if (error) {
+      this.logger.error(`Failed to send password reset email to ${email}: ${error.message}`);
+      throw new Error(error.message);
     }
+
+    this.logger.log(`Password reset email sent to ${email}`);
   }
 
   async sendOtpEmail(email: string, name: string, otp: string): Promise<void> {
-    try {
-      const htmlContent = this.getOtpTemplate(name, otp);
+    const { error } = await this.resend.emails.send({
+      from: this.fromEmail,
+      to: email,
+      subject: 'Your Sign-In Verification Code - Zuvelio',
+      html: this.getOtpTemplate(name, otp),
+    });
 
-      await this.transporter.sendMail({
-        from: this.configService.get<string>(
-          'SMTP_FROM_EMAIL',
-          'support@zuvelio.org',
-        ),
-        to: email,
-        subject: 'Your Sign-In Verification Code - Zuvelio',
-        html: htmlContent,
-      });
-
-      this.logger.log(`OTP email sent to ${email}`);
-    } catch (error) {
-      this.logger.error(`Failed to send OTP email to ${email}:`, error);
-      throw error;
+    if (error) {
+      this.logger.error(`Failed to send OTP email to ${email}: ${error.message}`);
+      throw new Error(error.message);
     }
+
+    this.logger.log(`OTP email sent to ${email}`);
   }
 
   private getOtpTemplate(name: string, otp: string): string {
@@ -113,9 +69,7 @@ export class MailerService {
         </head>
         <body>
           <div class="container">
-            <div class="header">
-              <h1>Sign-In Verification</h1>
-            </div>
+            <div class="header"><h1>Sign-In Verification</h1></div>
             <div class="content">
               <p>Hi ${name},</p>
               <p>Use the code below to complete your sign-in. This code expires in <strong>10 minutes</strong>.</p>
@@ -125,9 +79,7 @@ export class MailerService {
               <p>If you did not attempt to sign in, please ignore this email and consider changing your password.</p>
               <p><strong>Never share this code with anyone.</strong></p>
             </div>
-            <div class="footer">
-              <p>&copy; 2026 Zuvelio. All rights reserved.</p>
-            </div>
+            <div class="footer"><p>&copy; 2026 Zuvelio. All rights reserved.</p></div>
           </div>
         </body>
       </html>
@@ -152,9 +104,7 @@ export class MailerService {
         </head>
         <body>
           <div class="container">
-            <div class="header">
-              <h1>Password Reset Request</h1>
-            </div>
+            <div class="header"><h1>Password Reset Request</h1></div>
             <div class="content">
               <p>Hi ${name},</p>
               <p>We received a request to reset your password. Click the button below to reset your password. This link will expire in 30 minutes.</p>
@@ -163,9 +113,7 @@ export class MailerService {
               <p>Or copy and paste this link in your browser:</p>
               <p><small>${resetLink}</small></p>
             </div>
-            <div class="footer">
-              <p>&copy; 2026 Zuvelio. All rights reserved.</p>
-            </div>
+            <div class="footer"><p>&copy; 2026 Zuvelio. All rights reserved.</p></div>
           </div>
         </body>
       </html>
