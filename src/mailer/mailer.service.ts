@@ -9,10 +9,14 @@ export class MailerService {
   private logger = new Logger(MailerService.name);
 
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.getOrThrow<string>('RESEND_API_KEY');
+    const apiKey = this.configService.get<string>('RESEND_API_KEY', '');
     this.fromEmail = this.configService.get<string>('SMTP_FROM_EMAIL', 'support@zuvelio.org');
     this.resend = new Resend(apiKey);
-    this.logger.log(`Resend email service initialized (from: ${this.fromEmail})`);
+    if (!apiKey) {
+      this.logger.error('RESEND_API_KEY is not set — email sending will fail. Add it to Railway variables.');
+    } else {
+      this.logger.log(`Resend email service initialized (from: ${this.fromEmail})`);
+    }
   }
 
   async sendPasswordResetEmail(email: string, name: string, resetToken: string): Promise<void> {
